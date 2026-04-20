@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "python -m pip install -r requirements.txt && npm --prefix web/frontend ci",
+  "buildCommand": "npm --prefix web/frontend run build",
+  "outputDirectory": "web/frontend/dist",
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/((?!api/|assets/|.*\\.[^/]+$).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
