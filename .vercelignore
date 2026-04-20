@@ -1,0 +1,11 @@
+.git
+.venv
+.omx
+output
+test-results
+web/frontend/node_modules
+web/frontend/dist
+web/backend/__pycache__
+web/backend/app/__pycache__
+web/backend/app/api/__pycache__
+web/backend/app/core/__pycache__

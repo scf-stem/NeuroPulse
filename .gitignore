@@ -1,0 +1,91 @@
+# ============================================================
+# Tremor Guard - Git Ignore
+# ============================================================
+
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+.eggs/
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ==================== Node.js ====================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# ==================== Build ====================
+dist/
+build/
+*.local
+*.tsbuildinfo
+output/
+
+# ==================== IDE ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ==================== Environment ====================
+.env
+.env.local
+.env.*.local
+*.env
+
+# ==================== Logs ====================
+logs/
+*.log
+
+# ==================== OMX Runtime ====================
+.omx/state/
+.omx/tmux-hook.json
+
+# ==================== Local Runtime Links ====================
+web/backend/static
+
+# ==================== Database ====================
+*.db
+*.sqlite
+*.sqlite3
+
+# ==================== Secrets ====================
+secrets/
+*.pem
+*.key
+credentials.json
+
+# ==================== OS ====================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==================== Arduino ====================
+# Keep Arduino project files, ignore build artifacts
+*.elf
+*.hex
+*.bin
+.omx/
+.vercel
+.env*.local
