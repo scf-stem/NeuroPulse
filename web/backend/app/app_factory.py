@@ -43,7 +43,10 @@ def _make_lifespan(mode: AppMode):
 def _base_app(mode: AppMode, docs_url: str | None, redoc_url: str | None) -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
-        description="Parkinson's Tremor Monitoring Backend",
+        description=(
+            "Neuro Pulse backend APIs for device ingestion, tremor analysis, "
+            "care workflows, and AI-assisted reporting."
+        ),
         version="1.0.0",
         lifespan=_make_lifespan(mode),
         docs_url=docs_url,
