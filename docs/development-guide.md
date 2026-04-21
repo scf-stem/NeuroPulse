@@ -212,7 +212,7 @@ GYRO_CONFIG = 0x00;    // FS_SEL = 0
 
 ## 2.4 已完成功能 (Completed Features)
 
-基于 `mpu6050_init/mpu6050_init/mpu6050_init.ino` 代码，以下功能已实现并测试通过：
+基于 `firmware/mpu6050_init/mpu6050_init.ino` 代码，以下功能已实现并测试通过：
 
 ### 2.4.1 I2C 通信初始化 (I2C Initialization)
 

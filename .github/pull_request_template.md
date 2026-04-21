@@ -1,21 +1,12 @@
 ## Summary
 
-- Describe the change in one or two sentences.
+- 
 
-## Why
+## Validation
 
-- Explain the motivation, bug, or user need.
-
-## Verification
-
-- [ ] Backend checks
-- [ ] Frontend checks
-- [ ] Manual validation completed
-
-## Screenshots
-
-- Add screenshots for UI changes when applicable.
+- [ ] `cd backend && python -m compileall .`
+- [ ] `cd frontend && npm ci && npm run build`
 
 ## Notes
 
-- Mention follow-up work, deployment concerns, or known limitations.
+- 

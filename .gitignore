@@ -49,6 +49,9 @@ Thumbs.db
 .env.local
 .env.*.local
 *.env
+backend/.env
+backend/.env.*
+frontend/.env.local
 
 # ==================== Logs ====================
 logs/
@@ -57,9 +60,6 @@ logs/
 # ==================== OMX Runtime ====================
 .omx/state/
 .omx/tmux-hook.json
-
-# ==================== Local Runtime Links ====================
-web/backend/static
 
 # ==================== Database ====================
 *.db
@@ -89,3 +89,5 @@ Thumbs.db
 .omx/
 .vercel
 .env*.local
+frontend/dist/
+backend/.venv/

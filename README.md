@@ -1,63 +1,56 @@
 # NeuroPulse
 
-NeuroPulse is an AI-enhanced Parkinson's tremor monitoring platform that combines an ESP32 + MPU6050 wearable device, a FastAPI backend, and a Vue 3 frontend for home monitoring, analysis, and care guidance.
+NeuroPulse is an AI-enhanced Parkinson's tremor monitoring platform that combines embedded firmware, a FastAPI backend, and a Vue web client in one repository.
 
 ## Repository Layout
 
-- `mpu6050_init/`: ESP32 firmware and MPU6050 integration
-- `web/backend/`: FastAPI service, data models, APIs, and app configuration
-- `web/frontend/`: Vue 3 + TypeScript frontend
-- `api/`: serverless API entrypoints used for deployment
-- `web/Dockerfile`: single-container deployment image
+- `firmware/` ESP32 and MPU6050 firmware projects
+- `backend/` FastAPI service, Alembic config, and backend API entrypoints
+- `frontend/` Vue 3 web client
+- `deploy/` deployment-oriented config files kept separate from runtime code
+- `docs/` architecture, setup guides, and product material
 
-## Local Development
+## Quick Start
 
 ### Backend
 
 ```bash
-cd web/backend
+cd backend
+python -m venv .venv
+. .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Frontend
 
 ```bash
-cd web/frontend
-npm install
+cd frontend
+npm ci
+npm run build
 npm run dev
 ```
 
-## Build and Validation
+### Firmware
 
-### Backend
-
-```bash
-cd web/backend
-pytest
-black .
-flake8 .
-```
-
-### Frontend
-
-```bash
-cd web/frontend
-npm run lint
-npm run build
-```
-
-## Configuration
-
-Create environment files from the provided examples before running the app:
-
-- `web/backend/.env.example`
-- `web/frontend/.env.example`
-
-Never commit production credentials. Common required variables include `DATABASE_URL`, `ANTHROPIC_API_KEY`, `JWT_SECRET_KEY`, `DEVICE_API_KEY`, and `VITE_API_BASE_URL`.
+Open the sketch under `firmware/mpu6050_init/` in Arduino IDE or your ESP32-compatible toolchain.
 
 ## Documentation
 
-- [Project Overview](./about.md)
-- [Development Guide](./PROJECT_DEVELOPMENT_GUIDE.md)
-- [Zeabur Deployment Guide](./web/ZEABUR_DEPLOY.md)
+- [Architecture](docs/architecture.md)
+- [API Summary](docs/api.md)
+- [Backend Setup](docs/backend-setup.md)
+- [Frontend Setup](docs/frontend-setup.md)
+- [Firmware Setup](docs/firmware-setup.md)
+
+## Release and CI
+
+- Backend CI validates the FastAPI service layout and Python dependencies.
+- Frontend CI builds the Vue application.
+- Firmware check validates the expected sketch entrypoint and project layout.
+- Release workflow publishes build artifacts for tags and manual runs.
+
+## Contributing
+
+Review [CONTRIBUTING.md](CONTRIBUTING.md) and keep backend, frontend, and firmware changes aligned with the shared documentation in `docs/`.
