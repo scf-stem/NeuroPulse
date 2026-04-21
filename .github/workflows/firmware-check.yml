@@ -13,6 +13,6 @@ jobs:
   validate-layout:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Verify primary sketch exists
         run: test -f firmware/mpu6050_init/mpu6050_init.ino
