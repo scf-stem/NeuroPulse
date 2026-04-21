@@ -2,7 +2,7 @@
 # 震颤卫士后端依赖
 
 # Web Framework
-fastapi==0.109.0
+fastapi==0.136.0
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 
