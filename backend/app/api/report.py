@@ -21,6 +21,7 @@ import uuid
 from app.core.database import get_db
 from app.core.i18n import get_locale, msg
 from app.api.auth import get_current_user_from_token
+from app.models.device import Device
 from app.models.user import User
 from app.models.tremor import TremorData, TremorSession
 
@@ -109,6 +110,30 @@ def get_date_range(report_type: ReportType, start_date: Optional[datetime], end_
     return start, end
 
 
+def tremor_data_query_for_user(
+    user_id: int,
+    start_date: datetime,
+    end_date: datetime,
+    device_id: Optional[str] = None,
+):
+    query = (
+        select(TremorData)
+        .join(TremorSession, TremorData.session_id == TremorSession.id)
+        .where(
+            and_(
+                TremorSession.user_id == user_id,
+                TremorData.timestamp >= start_date,
+                TremorData.timestamp <= end_date,
+            )
+        )
+    )
+
+    if device_id:
+        query = query.join(Device, TremorSession.device_id == Device.id).where(Device.device_id == device_id)
+
+    return query
+
+
 # ============================================================
 # API Endpoints
 # ============================================================
@@ -150,13 +175,7 @@ async def generate_report(
     sessions = result.scalars().all()
 
     # 查询震颤数据
-    data_query = select(TremorData).where(
-        and_(
-            TremorData.user_id == current_user.id,
-            TremorData.timestamp >= start_date,
-            TremorData.timestamp <= end_date
-        )
-    )
+    data_query = tremor_data_query_for_user(current_user.id, start_date, end_date, request.device_id)
 
     result = await db.execute(data_query)
     tremor_data = result.scalars().all()
@@ -264,17 +283,7 @@ async def export_csv(
 
     导出指定时间范围内的原始震颤数据
     """
-    # 构建查询
-    conditions = [
-        TremorData.user_id == current_user.id,
-        TremorData.timestamp >= start_date,
-        TremorData.timestamp <= end_date
-    ]
-
-    if device_id:
-        conditions.append(TremorData.device_id == device_id)
-
-    query = select(TremorData).where(and_(*conditions)).order_by(TremorData.timestamp)
+    query = tremor_data_query_for_user(current_user.id, start_date, end_date, device_id).order_by(TremorData.timestamp)
     result = await db.execute(query)
     data = result.scalars().all()
 
@@ -293,15 +302,15 @@ async def export_csv(
     for d in data:
         writer.writerow([
             d.timestamp.isoformat(),
-            d.device_id,
+            d.session_id,
             d.detected,
             d.frequency,
             d.rms_amplitude,
-            d.peak_amplitude,
+            d.amplitude,
             d.severity,
-            d.accel_x,
-            d.accel_y,
-            d.accel_z
+            None,
+            None,
+            None
         ])
 
     output.seek(0)
@@ -329,17 +338,7 @@ async def export_json(
 
     导出指定时间范围内的原始震颤数据（JSON 格式）
     """
-    # 构建查询
-    conditions = [
-        TremorData.user_id == current_user.id,
-        TremorData.timestamp >= start_date,
-        TremorData.timestamp <= end_date
-    ]
-
-    if device_id:
-        conditions.append(TremorData.device_id == device_id)
-
-    query = select(TremorData).where(and_(*conditions)).order_by(TremorData.timestamp)
+    query = tremor_data_query_for_user(current_user.id, start_date, end_date, device_id).order_by(TremorData.timestamp)
     result = await db.execute(query)
     data = result.scalars().all()
 
@@ -357,17 +356,13 @@ async def export_json(
     for d in data:
         json_data["data"].append({
             "timestamp": d.timestamp.isoformat(),
-            "device_id": d.device_id,
+            "session_id": d.session_id,
             "detected": d.detected,
             "frequency": d.frequency,
             "rms_amplitude": d.rms_amplitude,
-            "peak_amplitude": d.peak_amplitude,
+            "amplitude": d.amplitude,
             "severity": d.severity,
-            "accelerometer": {
-                "x": d.accel_x,
-                "y": d.accel_y,
-                "z": d.accel_z
-            }
+            "spectrum_data": d.spectrum_data
         })
 
     # 生成文件名
@@ -400,24 +395,12 @@ async def get_doctor_summary(
     prev_start_date = prev_end_date - timedelta(days=days)
 
     # 当前周期数据
-    query = select(TremorData).where(
-        and_(
-            TremorData.user_id == current_user.id,
-            TremorData.timestamp >= start_date,
-            TremorData.timestamp <= end_date
-        )
-    )
+    query = tremor_data_query_for_user(current_user.id, start_date, end_date)
     result = await db.execute(query)
     current_data = result.scalars().all()
 
     # 前一周期数据
-    query = select(TremorData).where(
-        and_(
-            TremorData.user_id == current_user.id,
-            TremorData.timestamp >= prev_start_date,
-            TremorData.timestamp <= prev_end_date
-        )
-    )
+    query = tremor_data_query_for_user(current_user.id, prev_start_date, prev_end_date)
     result = await db.execute(query)
     prev_data = result.scalars().all()
 
