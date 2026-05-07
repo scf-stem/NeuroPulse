@@ -25,7 +25,7 @@ def _make_lifespan(mode: AppMode):
         print(f"🚀 {settings.APP_NAME} booting in {mode} mode")
         print(f"📊 environment: {settings.APP_ENV}")
 
-        should_init_db = mode != "vercel" and settings.AUTO_INIT_DB and settings.APP_ENV != "production"
+        should_init_db = mode != "vercel" and settings.AUTO_INIT_DB
         if should_init_db:
             await init_db()
             print("✅ database initialized from SQLAlchemy metadata")
