@@ -8,6 +8,7 @@ python-multipart==0.0.26
 
 # Database
 sqlalchemy==2.0.25
+greenlet==3.0.3          # Required by SQLAlchemy async engine
 asyncpg==0.29.0          # PostgreSQL async driver
 alembic==1.13.1          # Database migrations
 

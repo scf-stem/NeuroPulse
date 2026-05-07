@@ -1,0 +1,8 @@
+{
+  "build_command": "npm --prefix frontend ci --no-audit --no-fund && npm --prefix frontend run build && rm -rf backend/static && mkdir -p backend/static && cp -R frontend/dist/. backend/static/",
+  "python": {
+    "entry": "main.py",
+    "version": "3.12",
+    "package_manager": "pip"
+  }
+}

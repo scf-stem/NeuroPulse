@@ -1,0 +1,13 @@
+{
+  "name": "neuropulse-zeabur",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zeabur GitHub deployment wrapper for NeuroPulse.",
+  "scripts": {
+    "build": "npm --prefix frontend ci --no-audit --no-fund && npm --prefix frontend run build && rm -rf backend/static && mkdir -p backend/static && cp -R frontend/dist/. backend/static/"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "packageManager": "npm@10.8.2"
+}

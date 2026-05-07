@@ -90,4 +90,5 @@ Thumbs.db
 .vercel
 .env*.local
 frontend/dist/
+backend/static/
 backend/.venv/
