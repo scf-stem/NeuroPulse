@@ -296,10 +296,6 @@ const greeting = computed(() => {
         <slot></slot>
       </main>
 
-      <!-- Footer -->
-      <footer class="px-6 py-4 text-center text-sm text-gray-400">
-        <p>{{ t('layout.footer') }}</p>
-      </footer>
     </div>
 
     <!-- Click outside to close user menu -->

@@ -23,8 +23,9 @@ export const healthApi = {
     try {
       const response = await apiClient.get<HealthProfile>('/health/profile')
       return response.data
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      const httpError = error as { response?: { status?: number } }
+      if (httpError.response?.status === 404) {
         return null
       }
       throw error

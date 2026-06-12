@@ -14,7 +14,6 @@ export const messages = {
     app: {
       name: APP_NAME,
       tagline: 'Detecting movement patterns. Enabling earlier support.',
-      footer: `${APP_NAME} © 2024 · Built for continuous neurological care`,
     },
     common: {
       loading: 'Loading...',
@@ -135,7 +134,6 @@ export const messages = {
         'Fine motor control is clearly affected (RMS 3.5-4.0g).',
         'Persistent high-amplitude tremor needs intervention (RMS > 4.0g).',
       ],
-      footerCopyright: `© 2024 ${APP_NAME}. All rights reserved.`,
     },
     auth: {
       signInTitle: 'Welcome back',
@@ -191,7 +189,6 @@ export const messages = {
       welcomeSubtext: 'Wishing you a steady and confident day',
       search: 'Search',
       notifications: 'Notifications',
-      footer: `${APP_NAME} © 2024 · Built for continuous neurological care`,
       monitoringShortcut: 'Start monitoring',
       menu: {
         dashboard: 'Dashboard',
@@ -414,7 +411,6 @@ export const messages = {
     app: {
       name: APP_NAME,
       tagline: '识别细微运动模式，更早提供支持。',
-      footer: `${APP_NAME} © 2024 · 面向连续神经健康管理而打造`,
     },
     common: {
       loading: '加载中...',
@@ -533,7 +529,6 @@ export const messages = {
         '明显影响精细动作（RMS 3.5-4.0g）。',
         '持续高幅度震颤，需要及时干预（RMS > 4.0g）。',
       ],
-      footerCopyright: `© 2024 ${APP_NAME}。保留所有权利。`,
     },
     auth: {
       signInTitle: '欢迎回来',
@@ -588,7 +583,6 @@ export const messages = {
       welcomeSubtext: '祝您今天平稳顺心',
       search: '搜索',
       notifications: '通知',
-      footer: `${APP_NAME} © 2024 · 面向连续神经健康管理而打造`,
       monitoringShortcut: '开始监测',
       menu: {
         dashboard: '仪表盘',

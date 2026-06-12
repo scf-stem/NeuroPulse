@@ -34,6 +34,7 @@ const apiClient: AxiosInstance = axios.create({
   },
 })
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function demoResponse(config: any, data: unknown, status = 200) {
   return Promise.resolve({
     data,
@@ -45,6 +46,7 @@ function demoResponse(config: any, data: unknown, status = 200) {
   })
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function maybeAttachDemoAdapter(config: any, demoMode: boolean) {
   if (!demoMode) {
     return config

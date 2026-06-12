@@ -2,49 +2,51 @@
 # 震颤卫士后端依赖
 
 # Web Framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.26
+fastapi==0.128.8
+starlette==0.49.1
+uvicorn[standard]==0.30.6
+python-multipart==0.0.27
 
 # Database
-sqlalchemy==2.0.25
-greenlet==3.0.3          # Required by SQLAlchemy async engine
+sqlalchemy==2.0.36
+greenlet==3.2.5
 asyncpg==0.29.0          # PostgreSQL async driver
-alembic==1.13.1          # Database migrations
+alembic==1.13.3          # Database migrations
+mako>=1.3.12             # Pinned for CVE fix; comes from alembic
+setuptools==78.1.1       # Ensures runtime images do not inherit vulnerable base setuptools
 
 # Authentication
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.5.0
+pyasn1==0.6.3
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
-pydantic[email]==2.5.3
+pydantic[email]==2.8.2
 
 # Data Processing & Analysis
-numpy==1.26.3
-# scipy==1.12.0
-pandas==2.1.4
-
-# AI Integration
-# Qwen is called through the OpenAI-compatible DashScope HTTP API via httpx.
-# langchain==0.1.0       # RAG framework (optional)
+numpy==1.26.4
+pandas==2.2.3
 
 # Redis (caching & realtime)
-redis==5.0.1
-aioredis==2.0.1
+redis==5.0.8
 
 # WebSocket
-websockets==16.0
+websockets==13.1
 
 # Utils
-python-dotenv==1.0.0
-httpx==0.26.0
-pydantic-settings==2.1.0
+python-dotenv==1.2.2
+httpx==0.27.2
+pydantic-settings==2.5.2
 
 # PDF Report Generation
-reportlab==4.0.8
-weasyprint==60.2
+reportlab==4.2.5
+weasyprint==68.0
+pillow==12.2.0
 
 # Development
-pytest==7.4.4
-pytest-asyncio==0.23.3
-black==24.1.0
-flake8==7.0.0
+pytest==9.0.3
+pytest-asyncio==1.3.0
+black==26.3.1
+flake8==7.1.1
+
+# Project Python is 3.12; these pins intentionally use the security-fixed
+# release line that requires Python 3.10+.

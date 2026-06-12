@@ -52,24 +52,18 @@ class Settings(BaseSettings):
     @field_validator('DATABASE_URL', mode='before')
     @classmethod
     def build_database_url(cls, v, info):
-        """Build an asyncpg URL from Zeabur PostgreSQL variables."""
-        value = (
-            os.getenv('DATABASE_URL')
-            or os.getenv('POSTGRES_CONNECTION_STRING')
-            or os.getenv('POSTGRES_URI')
-            or os.getenv('POSTGRES_URL')
-        )
-        if not value:
-            value = v
-
+        """如果 Zeabur 注入了单独的 PostgreSQL 变量，自动构建 DATABASE_URL"""
+        # 检查是否有 Zeabur 注入的变量
         host = os.getenv('POSTGRES_HOST')
         port = os.getenv('POSTGRES_PORT', '5432')
         user = os.getenv('POSTGRES_USERNAME')
         password = os.getenv('POSTGRES_PASSWORD')
         database = os.getenv('POSTGRES_DATABASE')
 
-        if not value and all([host, user, password, database]):
+        if all([host, user, password, database]):
             value = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{database}"
+        else:
+            value = v
 
         if not value:
             return value

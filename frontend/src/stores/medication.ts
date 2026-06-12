@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Tremor Guard - Medication Store
  * 震颤卫士 - 用药管理状态

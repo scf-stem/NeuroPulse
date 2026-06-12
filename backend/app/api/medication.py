@@ -3,17 +3,17 @@ Tremor Guard - Medication API
 震颤卫士 - 用药管理接口
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from pydantic import BaseModel
-from typing import List, Optional, Any
+from typing import List, Optional
 from datetime import date, datetime
 
 from app.core.database import get_db
 from app.api.auth import get_current_user_from_token
 from app.models.user import User
-from app.models.medication import Medication, DosageRecord, MedicationReminder
+from app.models.medication import Medication, DosageRecord
 
 router = APIRouter()
 
@@ -231,7 +231,7 @@ async def record_dosage(
         select(Medication).where(Medication.id == record_data.medication_id, Medication.user_id == current_user.id)
     )
     if not med_result.scalar_one_or_none():
-         raise HTTPException(status_code=404, detail="Medication not found")
+        raise HTTPException(status_code=404, detail="Medication not found")
 
     new_record = DosageRecord(
         user_id=current_user.id,
@@ -280,8 +280,8 @@ async def get_today_schedule(
             # 查找匹配的记录
             for record in today_records:
                 if record.medication_id == med.id and record.scheduled_time == time_str:
-                     matching_record = record
-                     break
+                    matching_record = record
+                    break
             
             status = "taken" if matching_record else "pending"
             
@@ -291,8 +291,8 @@ async def get_today_schedule(
                 sch_hour, sch_minute = map(int, time_str.split(':'))
                 sch_dt = now.replace(hour=sch_hour, minute=sch_minute, second=0)
                 if now > sch_dt: # 简化：只要过了时间就算过期/未服，或者可以是 missed
-                     # status = "missed" # 暂不标记为 missed，保持 pending 让用户补录
-                     pass
+                    # status = "missed" # 暂不标记为 missed，保持 pending 让用户补录
+                    pass
 
             schedule_items.append(DosageScheduleItem(
                 medication=MedicationResponse.model_validate(med),

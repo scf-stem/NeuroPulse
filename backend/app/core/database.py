@@ -64,7 +64,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """初始化数据库 (创建所有表)"""
     # 导入所有模型以注册到 Base
-    from app.models import device, health, medication, rehabilitation, tremor_data, user
+    from app.models import device, health, medication, rehabilitation, tremor_data, user  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

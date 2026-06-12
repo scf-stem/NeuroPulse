@@ -8,10 +8,14 @@ Tremor Guard - Config API
 - 前端通过 POST /api/config/save 修改配置
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional
+
+from app.api.auth import get_current_user_from_token
+from app.core.security import require_privileged_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -68,6 +72,18 @@ class DeviceConfigUpload(BaseModel):
     freq_min: float
     freq_max: float
     severity_thresholds: List[float]
+
+
+# ============================================================
+# 授权辅助 (Auth Helpers)
+# ============================================================
+
+
+async def require_config_admin(
+    current_user: User = Depends(get_current_user_from_token),
+) -> User:
+    require_privileged_user(current_user)
+    return current_user
 
 
 # ============================================================
@@ -184,7 +200,10 @@ async def get_config_status():
 
 
 @router.post("/save")
-async def save_config(request: ConfigSaveRequest):
+async def save_config(
+    request: ConfigSaveRequest,
+    current_user: User = Depends(require_config_admin),
+):
     """
     保存配置参数 (前端调用)
 
@@ -216,7 +235,7 @@ async def save_config(request: ConfigSaveRequest):
 
 
 @router.post("/reset")
-async def reset_config():
+async def reset_config(current_user: User = Depends(require_config_admin)):
     """
     重置为默认配置
     """

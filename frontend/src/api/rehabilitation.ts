@@ -117,8 +117,9 @@ export const rehabilitationApi = {
     try {
       const response = await apiClient.get<TrainingPlan>('/rehabilitation/plans/active')
       return response.data
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      const httpError = error as { response?: { status?: number } }
+      if (httpError.response?.status === 404) {
         return null
       }
       throw error
@@ -184,8 +185,9 @@ export const rehabilitationApi = {
     try {
       const response = await apiClient.get<TrainingCheckIn>('/rehabilitation/check-ins/today')
       return response.data
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      const httpError = error as { response?: { status?: number } }
+      if (httpError.response?.status === 404) {
         return null
       }
       throw error

@@ -3,12 +3,12 @@ Tremor Guard - Rehabilitation API
 震颤卫士 - 运动康复接口
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc
 from pydantic import BaseModel
-from typing import List, Optional, Any
-from datetime import date, datetime, timedelta
+from typing import List, Optional
+from datetime import date, datetime
 
 from app.core.database import get_db
 from app.api.auth import get_current_user_from_token
@@ -105,18 +105,6 @@ async def list_exercises(
     result = await db.execute(query)
     return result.scalars().all()
 
-@router.get("/exercises/{ex_id}", response_model=ExerciseResponse)
-async def get_exercise(
-    ex_id: int,
-    db: AsyncSession = Depends(get_db)
-):
-    """获取单个运动详情"""
-    result = await db.execute(select(Exercise).where(Exercise.id == ex_id))
-    ex = result.scalar_one_or_none()
-    if not ex:
-        raise HTTPException(status_code=404, detail="Exercise not found")
-    return ex
-
 @router.get("/exercises/recommended", response_model=List[ExerciseResponse])
 async def get_recommended_exercises(
     db: AsyncSession = Depends(get_db)
@@ -129,6 +117,18 @@ async def get_recommended_exercises(
         .limit(3)
     )
     return result.scalars().all()
+
+@router.get("/exercises/{ex_id}", response_model=ExerciseResponse)
+async def get_exercise(
+    ex_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取单个运动详情"""
+    result = await db.execute(select(Exercise).where(Exercise.id == ex_id))
+    ex = result.scalar_one_or_none()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    return ex
 
 # ============================================================
 # Training Plan Endpoints

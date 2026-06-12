@@ -8,6 +8,7 @@ import { dataApi } from '@/api/data'
 import { mockService, mockConfig } from '@/services/mock'
 import RealTimeWaveCheck from '@/components/charts/RealTimeWaveCheck.vue'
 import { localeDateCode, t } from '@/i18n'
+import { enableMonitorMock } from '@/config/runtime'
 
 const tremorStore = useTremorStore()
 
@@ -15,7 +16,7 @@ const tremorStore = useTremorStore()
 const loading = ref(false)
 const error = ref<string | null>(null)
 const deviceId = ref('ESP32_DEFAULT')
-const useMock = ref(true) // 默认开启模拟模式
+const useMock = ref(enableMonitorMock) // 演示模式由 VITE_ENABLE_MONITOR_MOCK 控制
 const isMocking = ref(false)
 
 // 图表数据
@@ -302,6 +303,13 @@ watch(isMonitoring, (newVal) => {
 <template>
   <AppLayout>
     <div class="space-y-6">
+      <!-- 演示模式提示 -->
+      <div
+        v-if="useMock"
+        class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+      >
+        当前为演示模式，数据不来自实时设备。设置 VITE_ENABLE_MONITOR_MOCK=true 可启用。
+      </div>
       <!-- 页面标题 -->
       <div class="flex items-center justify-between">
         <div>

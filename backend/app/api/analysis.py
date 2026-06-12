@@ -7,7 +7,7 @@ Tremor Guard - Analysis API
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, case
+from sqlalchemy import select, func, and_
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from typing import Optional, List
@@ -15,7 +15,6 @@ from typing import Optional, List
 from app.core.database import get_db
 from app.api.auth import get_current_user_from_token
 from app.models.user import User
-from app.models.device import Device
 from app.models.tremor_data import TremorData, TremorSession
 
 router = APIRouter()

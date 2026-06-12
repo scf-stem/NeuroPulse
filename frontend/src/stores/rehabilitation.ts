@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Tremor Guard - Rehabilitation Store
  * 震颤卫士 - 运动康复状态管理

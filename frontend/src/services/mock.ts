@@ -20,7 +20,6 @@ class MockService {
     private timer: number | null = null
 
     // 模拟数据生成器
-    // @ts-ignore
     generateWavePoint(timestamp: number): number {
         // 基础噪声
         let value = (Math.random() - 0.5) * mockConfig.noiseLevel

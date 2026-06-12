@@ -7,7 +7,7 @@ import type { User } from '@/types'
 
 export type SessionLane = 'anonymous' | 'demo' | 'authenticated'
 
-const AUTH_TOKEN_STORAGE_KEY = 'token'
+const AUTH_TOKEN_STORAGE_KEY = 'neuro-pulse-auth-token'
 const AUTH_USER_STORAGE_KEY = 'neuro-pulse-user'
 const SESSION_LANE_STORAGE_KEY = 'neuro-pulse-session-lane'
 const DEMO_SESSION_STORAGE_KEY = 'neuro-pulse-demo-session'
@@ -18,6 +18,10 @@ function hasWindow() {
 
 function cloneDemoUser(): User {
   return { ...demoUser }
+}
+
+function authStorage() {
+  return window.sessionStorage
 }
 
 function readStoredUser(): User | null {
@@ -68,7 +72,7 @@ export const useSessionStore = defineStore('session', () => {
     if (lane.value === 'demo') {
       storage.setItem(DEMO_MODE_STORAGE_KEY, '1')
       storage.setItem(DEMO_SESSION_STORAGE_KEY, '1')
-      storage.removeItem(AUTH_TOKEN_STORAGE_KEY)
+      authStorage().removeItem(AUTH_TOKEN_STORAGE_KEY)
       storage.removeItem(AUTH_USER_STORAGE_KEY)
       return
     }
@@ -77,7 +81,7 @@ export const useSessionStore = defineStore('session', () => {
     storage.removeItem(DEMO_SESSION_STORAGE_KEY)
 
     if (lane.value === 'authenticated' && token.value) {
-      storage.setItem(AUTH_TOKEN_STORAGE_KEY, token.value)
+      authStorage().setItem(AUTH_TOKEN_STORAGE_KEY, token.value)
       if (user.value) {
         storage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user.value))
       } else {
@@ -86,7 +90,7 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
 
-    storage.removeItem(AUTH_TOKEN_STORAGE_KEY)
+    authStorage().removeItem(AUTH_TOKEN_STORAGE_KEY)
     storage.removeItem(AUTH_USER_STORAGE_KEY)
   }
 
@@ -111,8 +115,10 @@ export const useSessionStore = defineStore('session', () => {
     const storedLane = storage.getItem(SESSION_LANE_STORAGE_KEY)
     const demoEnabled = storage.getItem(DEMO_MODE_STORAGE_KEY) === '1'
     const demoSession = storage.getItem(DEMO_SESSION_STORAGE_KEY) === '1'
-    const storedToken = storage.getItem(AUTH_TOKEN_STORAGE_KEY)
+    const storedToken = authStorage().getItem(AUTH_TOKEN_STORAGE_KEY)
     const storedUser = readStoredUser()
+
+    storage.removeItem('token')
 
     if (demoEnabled || demoSession || storedLane === 'demo') {
       applyState('demo', cloneDemoUser(), DEMO_TOKEN)

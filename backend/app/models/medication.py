@@ -3,8 +3,8 @@ Tremor Guard - Medication Models
 震颤卫士 - 药物模型
 """
 
-from datetime import datetime, time
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, ForeignKey, Text, JSON, Time
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base

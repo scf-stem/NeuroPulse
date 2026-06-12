@@ -52,10 +52,11 @@
 
 // ============================================================================
 // WiFi 配置 (WiFi Configuration)
-// 请在此处填写您的 WiFi 信息
+// 请在 network_secrets.h 中填写您的 WiFi 信息
 // ============================================================================
-const char* WIFI_SSID     = "SCF-XIAOMI";     // WiFi 名称 (SSID)
-const char* WIFI_PASSWORD = "scf888888";     // WiFi 密码 (Password)
+
+// WiFi credentials come from network_secrets.h (included via network_config.h)
+// Copy network_secrets.example.h to network_secrets.h and fill in your values.
 
 // 后端服务器配置 (Backend Server Configuration)
 // 服务器地址在 network_config.h 中定义 (SERVER_HOST, SERVER_PORT)

@@ -13,6 +13,16 @@
 #ifndef NETWORK_CONFIG_H
 #define NETWORK_CONFIG_H
 
+#include "network_secrets.h"
+
+#ifndef WIFI_SSID
+#error "WIFI_SSID must be defined in network_secrets.h"
+#endif
+
+#ifndef WIFI_PASSWORD
+#error "WIFI_PASSWORD must be defined in network_secrets.h"
+#endif
+
 // ============================================================
 // 服务器配置 (Server Configuration)
 // ============================================================

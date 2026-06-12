@@ -107,9 +107,8 @@ onMounted(() => {
           </div>
         </div>
         
-        <div class="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center text-xs">
-          <p>{{ t('landing.footerCopyright') }}</p>
-          <div class="flex gap-4 mt-4 md:mt-0">
+        <div class="border-t border-gray-800 pt-8 flex flex-col md:flex-row items-center text-xs">
+          <div class="flex gap-4">
             <a href="#" class="hover:text-white transition-colors">Terms</a>
             <a href="#" class="hover:text-white transition-colors">Privacy</a>
             <a href="#" class="hover:text-white transition-colors">Cookies</a>

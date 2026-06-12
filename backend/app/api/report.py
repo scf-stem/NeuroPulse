@@ -8,9 +8,9 @@ Neuro Pulse - 报告生成接口
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_
 from pydantic import BaseModel
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from typing import Optional, List
 from enum import Enum
 import io
@@ -21,7 +21,6 @@ import uuid
 from app.core.database import get_db
 from app.core.i18n import get_locale, msg
 from app.api.auth import get_current_user_from_token
-from app.models.device import Device
 from app.models.user import User
 from app.models.tremor import TremorData, TremorSession
 
@@ -110,30 +109,6 @@ def get_date_range(report_type: ReportType, start_date: Optional[datetime], end_
     return start, end
 
 
-def tremor_data_query_for_user(
-    user_id: int,
-    start_date: datetime,
-    end_date: datetime,
-    device_id: Optional[str] = None,
-):
-    query = (
-        select(TremorData)
-        .join(TremorSession, TremorData.session_id == TremorSession.id)
-        .where(
-            and_(
-                TremorSession.user_id == user_id,
-                TremorData.timestamp >= start_date,
-                TremorData.timestamp <= end_date,
-            )
-        )
-    )
-
-    if device_id:
-        query = query.join(Device, TremorSession.device_id == Device.id).where(Device.device_id == device_id)
-
-    return query
-
-
 # ============================================================
 # API Endpoints
 # ============================================================
@@ -156,7 +131,7 @@ async def generate_report(
             request.start_date,
             request.end_date
         )
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=msg(get_locale(request_http), "report.custom_dates_required")
@@ -175,7 +150,13 @@ async def generate_report(
     sessions = result.scalars().all()
 
     # 查询震颤数据
-    data_query = tremor_data_query_for_user(current_user.id, start_date, end_date, request.device_id)
+    data_query = select(TremorData).where(
+        and_(
+            TremorData.user_id == current_user.id,
+            TremorData.timestamp >= start_date,
+            TremorData.timestamp <= end_date
+        )
+    )
 
     result = await db.execute(data_query)
     tremor_data = result.scalars().all()
@@ -283,7 +264,17 @@ async def export_csv(
 
     导出指定时间范围内的原始震颤数据
     """
-    query = tremor_data_query_for_user(current_user.id, start_date, end_date, device_id).order_by(TremorData.timestamp)
+    # 构建查询
+    conditions = [
+        TremorData.user_id == current_user.id,
+        TremorData.timestamp >= start_date,
+        TremorData.timestamp <= end_date
+    ]
+
+    if device_id:
+        conditions.append(TremorData.device_id == device_id)
+
+    query = select(TremorData).where(and_(*conditions)).order_by(TremorData.timestamp)
     result = await db.execute(query)
     data = result.scalars().all()
 
@@ -302,15 +293,15 @@ async def export_csv(
     for d in data:
         writer.writerow([
             d.timestamp.isoformat(),
-            d.session_id,
+            d.device_id,
             d.detected,
             d.frequency,
             d.rms_amplitude,
-            d.amplitude,
+            d.peak_amplitude,
             d.severity,
-            None,
-            None,
-            None
+            d.accel_x,
+            d.accel_y,
+            d.accel_z
         ])
 
     output.seek(0)
@@ -338,7 +329,17 @@ async def export_json(
 
     导出指定时间范围内的原始震颤数据（JSON 格式）
     """
-    query = tremor_data_query_for_user(current_user.id, start_date, end_date, device_id).order_by(TremorData.timestamp)
+    # 构建查询
+    conditions = [
+        TremorData.user_id == current_user.id,
+        TremorData.timestamp >= start_date,
+        TremorData.timestamp <= end_date
+    ]
+
+    if device_id:
+        conditions.append(TremorData.device_id == device_id)
+
+    query = select(TremorData).where(and_(*conditions)).order_by(TremorData.timestamp)
     result = await db.execute(query)
     data = result.scalars().all()
 
@@ -356,13 +357,17 @@ async def export_json(
     for d in data:
         json_data["data"].append({
             "timestamp": d.timestamp.isoformat(),
-            "session_id": d.session_id,
+            "device_id": d.device_id,
             "detected": d.detected,
             "frequency": d.frequency,
             "rms_amplitude": d.rms_amplitude,
-            "amplitude": d.amplitude,
+            "peak_amplitude": d.peak_amplitude,
             "severity": d.severity,
-            "spectrum_data": d.spectrum_data
+            "accelerometer": {
+                "x": d.accel_x,
+                "y": d.accel_y,
+                "z": d.accel_z
+            }
         })
 
     # 生成文件名
@@ -395,12 +400,24 @@ async def get_doctor_summary(
     prev_start_date = prev_end_date - timedelta(days=days)
 
     # 当前周期数据
-    query = tremor_data_query_for_user(current_user.id, start_date, end_date)
+    query = select(TremorData).where(
+        and_(
+            TremorData.user_id == current_user.id,
+            TremorData.timestamp >= start_date,
+            TremorData.timestamp <= end_date
+        )
+    )
     result = await db.execute(query)
     current_data = result.scalars().all()
 
     # 前一周期数据
-    query = tremor_data_query_for_user(current_user.id, prev_start_date, prev_end_date)
+    query = select(TremorData).where(
+        and_(
+            TremorData.user_id == current_user.id,
+            TremorData.timestamp >= prev_start_date,
+            TremorData.timestamp <= prev_end_date
+        )
+    )
     result = await db.execute(query)
     prev_data = result.scalars().all()
 

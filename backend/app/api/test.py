@@ -8,8 +8,17 @@ Tremor Guard - Test API
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List, Any
-import json
+from typing import Optional, List
+
+SENSITIVE_HEADERS = {"authorization", "cookie", "x-device-key"}
+
+
+def sanitize_headers(headers):
+    return {
+        key: ("<redacted>" if key.lower() in SENSITIVE_HEADERS else value)
+        for key, value in headers.items()
+    }
+
 
 router = APIRouter()
 
@@ -40,7 +49,7 @@ async def receive_packet(request: Request):
     try:
         # 尝试解析 JSON
         body = await request.json()
-    except:
+    except ValueError:
         # 如果不是 JSON，读取原始 body
         raw_body = await request.body()
         body = {"raw": raw_body.decode('utf-8', errors='ignore')}
@@ -50,7 +59,7 @@ async def receive_packet(request: Request):
         "id": len(received_packets) + 1,
         "received_at": datetime.now().isoformat(),
         "client_ip": request.client.host if request.client else "unknown",
-        "headers": dict(request.headers),
+        "headers": sanitize_headers(request.headers),
         "data": body
     }
 
@@ -78,7 +87,7 @@ async def receive_heartbeat(request: Request):
 
     try:
         body = await request.json()
-    except:
+    except ValueError:
         body = {}
 
     packet = {
@@ -110,7 +119,7 @@ async def receive_batch(request: Request):
 
     try:
         body = await request.json()
-    except:
+    except ValueError:
         raw_body = await request.body()
         body = {"raw": raw_body.decode('utf-8', errors='ignore')}
 

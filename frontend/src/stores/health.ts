@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Tremor Guard - Health Store
  * 震颤卫士 - 健康档案状态管理

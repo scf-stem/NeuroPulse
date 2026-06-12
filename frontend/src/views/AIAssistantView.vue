@@ -2,85 +2,93 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import AppLayout from '@/layouts/AppLayout.vue'
-import { aiApi, type AnalysisResponse, type InsightsResponse } from '@/api/ai'
-import { APP_NAME } from '@/config/branding'
+import {
+  aiApi,
+  type DailyAnalysisResponse,
+  type DoctorReportRequest,
+  type DoctorVisitReportResponse,
+  type InsightsResponse,
+  type SymptomCheckResponse,
+} from '@/api/ai'
 import { demoAiIntro } from '@/demo/data'
 import { legacyT, t, tList } from '@/i18n'
 import type {
   AIAction,
-  DailyAnalysis,
-  PersonalizedAdvice,
-  DoctorVisitReport,
-  SymptomCheckRequest,
-  SymptomCheckResponse,
   ChatMessage
 } from '@/types'
 
 const router = useRouter()
 const AI_REPORT_STORAGE_KEY = 'ai-health-report-current'
 
-// 聊天相关
 const messages = ref<ChatMessage[]>([])
 const inputMessage = ref('')
 const isLoading = ref(false)
 const actionLoading = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
 
-// 分析相关
-const analysisResult = ref<AnalysisResponse | null>(null)
-const isAnalyzing = ref(false)
-const analysisDays = ref(7)
-
-// 洞察和提示
 const insights = ref<InsightsResponse | null>(null)
 const healthTips = ref<string[]>([])
 const loadingInsights = ref(false)
 
-// 今日解读相关
-const dailyAnalysis = ref<DailyAnalysis | null>(null)
-const personalizedAdvice = ref<PersonalizedAdvice[]>([])
+const dailyAnalysis = ref<DailyAnalysisResponse | null>(null)
 const loadingDailyAnalysis = ref(false)
+const dailyAnalysisError = ref<string | null>(null)
 
-// 就诊报告相关
-const doctorReport = ref<DoctorVisitReport | null>(null)
-const generatingReport = ref(false)
-const reportDays = ref(30)
-
-// 症状自查相关
-const symptomCheckVisible = ref(false)
-const symptomCheckResult = ref<SymptomCheckResponse | null>(null)
-const checkingSymptoms = ref(false)
-const symptomForm = ref<SymptomCheckRequest>({
-  symptoms: [],
-  duration: '',
-  severity: 3,
-  associated_factors: [],
+const doctorReportRange = ref({
+  start: '',
+  end: '',
 })
+const doctorReport = ref<DoctorVisitReportResponse | null>(null)
+const doctorReportLoading = ref(false)
+const doctorReportError = ref<string | null>(null)
 
-// 当前标签页
-const activeTab = ref<'chat' | 'daily' | 'report' | 'analysis' | 'insights'>('chat')
+const symptomInput = ref('')
+const associatedFactorsInput = ref('')
+const symptomDuration = ref('days')
+const symptomSeverity = ref(3)
+const symptomCheckResult = ref<SymptomCheckResponse | null>(null)
+const symptomCheckLoading = ref(false)
+const symptomCheckError = ref<string | null>(null)
 
-// 快捷问题
 const quickQuestions = computed(() => tList('ai.quickQuestions'))
 
-// 计算属性
+const activeTab = ref<'chat' | 'daily' | 'report' | 'insights'>('chat')
+
 const conversationHistory = computed(() => {
   return messages.value.map(m => ({
     role: m.role,
     content: m.content,
     timestamp: m.timestamp
   }))
-
 })
 
-// 方法
+function formatDateInput(date: Date) {
+  return date.toISOString().split('T')[0]
+}
+
+function initDoctorReportRange() {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(start.getDate() - 30)
+  doctorReportRange.value = {
+    start: formatDateInput(start),
+    end: formatDateInput(end),
+  }
+}
+
+function parseListInput(value: string) {
+  return value
+    .split(/[\n,，、；;]+/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
 async function sendMessage(text?: string) {
   const messageText = text || inputMessage.value.trim()
   if (!messageText || isLoading.value) return
 
   inputMessage.value = ''
 
-  // 添加用户消息
   messages.value.push({
     role: 'user',
     content: messageText,
@@ -176,19 +184,6 @@ async function scrollToBottom() {
   }
 }
 
-async function runAnalysis() {
-  isAnalyzing.value = true
-  analysisResult.value = null
-
-  try {
-    analysisResult.value = await aiApi.analyze(analysisDays.value)
-  } catch (error: any) {
-    console.error('分析失败:', error)
-  } finally {
-    isAnalyzing.value = false
-  }
-}
-
 async function loadInsights() {
   loadingInsights.value = true
 
@@ -207,190 +202,131 @@ async function loadInsights() {
   }
 }
 
-function clearChat() {
-  messages.value = [...demoAiIntro]
-}
-
-function getRiskColor(risk: string): string {
-  switch (risk) {
-    case 'low':
-    case '低': return 'text-mint-600 bg-mint-100'
-    case 'high':
-    case '高': return 'text-red-500 bg-red-100'
-    default: return 'text-amber-600 bg-amber-100'
-  }
-}
-
-function getRiskLabel(risk: string): string {
-  switch (risk) {
-    case 'low':
-    case '低':
-      return legacyT('低')
-    case 'high':
-    case '高':
-      return legacyT('高')
-    case 'medium':
-    case '中':
-    default:
-      return legacyT('中')
-  }
-}
-
-function getTrendIcon(trend: string): string {
-  switch (trend) {
-    case 'better':
-    case 'improving':
-      return '↓'
-    case 'worse':
-    case 'worsening':
-      return '↑'
-    default:
-      return '→'
-  }
-}
-
-function getTrendColor(trend: string): string {
-  switch (trend) {
-    case 'better':
-    case 'improving':
-      return 'text-mint-600'
-    case 'worse':
-    case 'worsening':
-      return 'text-red-500'
-    default:
-      return 'text-gray-500'
-  }
-}
-
-function getPriorityColor(priority: string): string {
-  switch (priority) {
-    case 'high':
-      return 'bg-red-100 text-red-700 border-red-200'
-    case 'medium':
-      return 'bg-amber-100 text-amber-700 border-amber-200'
-    default:
-      return 'bg-mint-100 text-mint-700 border-mint-200'
-  }
-}
-
-function getUrgencyColor(level: string): string {
-  switch (level) {
-    case 'urgent':
-      return 'text-red-600 bg-red-100'
-    case 'soon':
-      return 'text-amber-600 bg-amber-100'
-    default:
-      return 'text-mint-600 bg-mint-100'
-  }
-}
-
-function getUrgencyLabel(level: string): string {
-  switch (level) {
-    case 'urgent':
-      return legacyT('建议尽快就医')
-    case 'soon':
-      return legacyT('建议近期就医')
-    default:
-      return legacyT('可继续观察')
-  }
-}
-
-// 今日解读相关方法
-async function loadDailyAnalysis() {
+async function loadDailyAnalysis(date?: string) {
   loadingDailyAnalysis.value = true
+  dailyAnalysisError.value = null
+
   try {
-    const [analysis, advice] = await Promise.all([
-      aiApi.getDailyAnalysis(),
-      aiApi.getPersonalizedAdvice(),
-    ])
-    dailyAnalysis.value = analysis
-    personalizedAdvice.value = advice
-  } catch (error) {
-    console.error('加载今日解读失败:', error)
+    dailyAnalysis.value = await aiApi.getDailyAnalysis(date)
+  } catch (error: any) {
+    dailyAnalysisError.value = error.response?.data?.detail || error.message || '加载每日解读失败'
   } finally {
     loadingDailyAnalysis.value = false
   }
 }
 
-// 就诊报告相关方法
 async function generateDoctorReport() {
-  generatingReport.value = true
+  doctorReportError.value = null
   doctorReport.value = null
+
+  if (!doctorReportRange.value.start || !doctorReportRange.value.end) {
+    doctorReportError.value = '请选择完整的报告时间范围'
+    return
+  }
+
+  if (doctorReportRange.value.start > doctorReportRange.value.end) {
+    doctorReportError.value = '开始日期不能晚于结束日期'
+    return
+  }
+
+  doctorReportLoading.value = true
+
   try {
-    const end = new Date()
-    const start = new Date()
-    start.setDate(end.getDate() - reportDays.value)
-    
-    doctorReport.value = await aiApi.generateDoctorReport({
-      startDate: start.toISOString().split('T')[0],
-      endDate: end.toISOString().split('T')[0]
-    })
-  } catch (error) {
-    console.error('生成就诊报告失败:', error)
+    const payload: DoctorReportRequest = {
+      start_date: doctorReportRange.value.start,
+      end_date: doctorReportRange.value.end,
+    }
+    doctorReport.value = await aiApi.generateDoctorReport(payload)
+  } catch (error: any) {
+    doctorReportError.value = error.response?.data?.detail || error.message || '生成就诊报告失败'
   } finally {
-    generatingReport.value = false
+    doctorReportLoading.value = false
   }
 }
 
-async function downloadReportPDF() {
-  if (!doctorReport.value) return
-  // TODO: 实现 PDF 导出功能
-  alert(legacyT('PDF 导出功能即将上线'))
-}
-
-// 症状自查相关方法
-async function checkSymptoms() {
-  if (symptomForm.value.symptoms.length === 0) return
-  checkingSymptoms.value = true
-  try {
-    symptomCheckResult.value = await aiApi.checkSymptoms(symptomForm.value)
-  } catch (error) {
-    console.error('症状自查失败:', error)
-  } finally {
-    checkingSymptoms.value = false
-  }
-}
-
-function resetSymptomCheck() {
-  symptomForm.value = {
-    symptoms: [],
-    duration: '',
-    severity: 3,
-    associated_factors: [],
-  }
+async function runSymptomCheck() {
+  symptomCheckError.value = null
   symptomCheckResult.value = null
+
+  const symptoms = parseListInput(symptomInput.value)
+  if (!symptoms.length) {
+    symptomCheckError.value = '请至少输入一个症状'
+    return
+  }
+
+  symptomCheckLoading.value = true
+
+  try {
+    const associatedFactors = parseListInput(associatedFactorsInput.value)
+    symptomCheckResult.value = await aiApi.checkSymptoms({
+      symptoms,
+      duration: symptomDuration.value,
+      severity: symptomSeverity.value,
+      associated_factors: associatedFactors.length ? associatedFactors : undefined,
+    })
+  } catch (error: any) {
+    symptomCheckError.value = error.response?.data?.detail || error.message || '症状自查失败'
+  } finally {
+    symptomCheckLoading.value = false
+  }
 }
 
-// 常见症状选项
-const commonSymptoms = [
-  '手部震颤',
-  '腿部震颤',
-  '行动迟缓',
-  '肌肉僵硬',
-  '平衡困难',
-  '书写困难',
-  '说话困难',
-  '睡眠问题',
-  '情绪变化',
-  '疲劳',
-].map((item) => legacyT(item))
+function clearChat() {
+  messages.value = [...demoAiIntro]
+}
 
-const durationOptions = [
-  { value: 'hours', label: legacyT('几小时内') },
-  { value: 'days', label: legacyT('几天') },
-  { value: 'weeks', label: legacyT('几周') },
-  { value: 'months', label: legacyT('几个月') },
-  { value: 'ongoing', label: legacyT('长期存在') },
-]
+function getTrendTone(trend: string) {
+  switch (trend) {
+    case 'better':
+      return 'bg-mint-100 text-mint-700'
+    case 'worse':
+      return 'bg-red-100 text-red-600'
+    default:
+      return 'bg-warmGray-100 text-gray-600'
+  }
+}
 
-// 生命周期
+function getTrendLabel(trend: string) {
+  switch (trend) {
+    case 'better':
+      return '较昨日更稳定'
+    case 'worse':
+      return '较昨日波动更大'
+    default:
+      return '与昨日接近'
+  }
+}
+
+function getUrgencyTone(level: string) {
+  switch (level) {
+    case 'urgent':
+      return 'bg-red-100 text-red-600'
+    case 'soon':
+      return 'bg-amber-100 text-amber-700'
+    default:
+      return 'bg-mint-100 text-mint-700'
+  }
+}
+
+function getUrgencyLabel(level: string) {
+  switch (level) {
+    case 'urgent':
+      return '尽快处理'
+    case 'soon':
+      return '建议近期就医'
+    default:
+      return '常规观察'
+  }
+}
+
 onMounted(async () => {
   messages.value = [...demoAiIntro]
+  initDoctorReportRange()
 
-  // 加载洞察和提示
-  await loadInsights()
-  // 预加载今日解读
-  await loadDailyAnalysis()
+  await Promise.all([
+    loadInsights(),
+    loadDailyAnalysis(),
+  ])
 })
 </script>
 
@@ -441,9 +377,9 @@ onMounted(async () => {
         >
           <span class="flex items-center gap-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
-            {{ t('ai.daily') }}
+            今日解读
           </span>
         </button>
         <button
@@ -459,23 +395,7 @@ onMounted(async () => {
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            {{ t('ai.report') }}
-          </span>
-        </button>
-        <button
-          @click="activeTab = 'analysis'"
-          :class="[
-            'px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
-            activeTab === 'analysis'
-              ? 'bg-white text-lavender-600 shadow-soft'
-              : 'text-gray-500 hover:text-gray-700'
-          ]"
-        >
-          <span class="flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            {{ t('ai.analysis') }}
+            就诊报告
           </span>
         </button>
         <button
@@ -648,724 +568,244 @@ onMounted(async () => {
 
     <!-- 今日解读 -->
     <div v-else-if="activeTab === 'daily'" class="space-y-6">
-      <!-- 加载状态 -->
-      <div v-if="loadingDailyAnalysis" class="flex flex-col items-center justify-center h-64">
-        <div class="relative">
-          <div class="w-16 h-16 border-4 border-lavender-200 rounded-full"></div>
-          <div class="w-16 h-16 border-4 border-lavender-500 border-t-transparent rounded-full animate-spin absolute inset-0"></div>
-        </div>
-        <p class="text-gray-500 mt-4">加载今日解读中...</p>
-      </div>
-
-      <template v-else>
-        <!-- 今日数据摘要 -->
-        <div v-if="dailyAnalysis" class="card">
-          <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </div>
-              <div>
-                <h3 class="text-lg font-semibold text-gray-800">{{ dailyAnalysis.date }} 数据解读</h3>
-                <p class="text-sm text-gray-500">{{ dailyAnalysis.summary }}</p>
-              </div>
-            </div>
-            <button @click="loadDailyAnalysis" class="btn btn-ghost text-sm">
-              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              刷新
-            </button>
-          </div>
-
-          <!-- 震颤数据统计 -->
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-gradient-to-br from-lavender-50 to-warmGray-50 rounded-xl p-4 border border-lavender-100">
-              <p class="text-sm text-gray-500 mb-1">检测次数</p>
-              <p class="text-2xl font-bold text-gray-800">{{ dailyAnalysis.tremor_summary.total_detections }}</p>
-            </div>
-            <div class="bg-gradient-to-br from-lavender-50 to-warmGray-50 rounded-xl p-4 border border-lavender-100">
-              <p class="text-sm text-gray-500 mb-1">平均严重度</p>
-              <p class="text-2xl font-bold text-gray-800">{{ dailyAnalysis.tremor_summary.avg_severity.toFixed(1) }}</p>
-            </div>
-            <div class="bg-gradient-to-br from-lavender-50 to-warmGray-50 rounded-xl p-4 border border-lavender-100">
-              <p class="text-sm text-gray-500 mb-1">最高严重度</p>
-              <p class="text-2xl font-bold text-gray-800">{{ dailyAnalysis.tremor_summary.max_severity }}</p>
-            </div>
-            <div class="bg-gradient-to-br from-lavender-50 to-warmGray-50 rounded-xl p-4 border border-lavender-100">
-              <p class="text-sm text-gray-500 mb-1">趋势</p>
-              <p class="text-2xl font-bold" :class="getTrendColor(dailyAnalysis.tremor_summary.trend)">
-                {{ getTrendIcon(dailyAnalysis.tremor_summary.trend) }} {{ legacyT(dailyAnalysis.tremor_summary.comparison_text) }}
-              </p>
-            </div>
-          </div>
-
-          <!-- 关键观察 -->
-          <div v-if="dailyAnalysis.key_observations.length" class="mb-6">
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <svg class="w-5 h-5 text-lavender-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              关键观察
-            </h4>
-            <div class="space-y-2">
-              <div
-                v-for="(obs, index) in dailyAnalysis.key_observations"
-                :key="index"
-                class="flex items-start gap-3 p-3 bg-warmGray-50 rounded-xl"
-              >
-                <div class="w-6 h-6 bg-lavender-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <span class="text-lavender-600 text-sm font-medium">{{ index + 1 }}</span>
-                </div>
-                <span class="text-gray-700">{{ obs }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 注意事项 -->
-          <div v-if="dailyAnalysis.concerns.length" class="mb-6">
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              需要关注
-            </h4>
-            <div class="space-y-2">
-              <div
-                v-for="(concern, index) in dailyAnalysis.concerns"
-                :key="index"
-                class="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-100"
-              >
-                <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01" />
-                </svg>
-                <span class="text-amber-800">{{ concern }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 积极方面 -->
-          <div v-if="dailyAnalysis.positive_notes.length" class="mb-6">
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <svg class="w-5 h-5 text-mint-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              积极方面
-            </h4>
-            <div class="space-y-2">
-              <div
-                v-for="(note, index) in dailyAnalysis.positive_notes"
-                :key="index"
-                class="flex items-start gap-3 p-3 bg-mint-50 rounded-xl border border-mint-100"
-              >
-                <svg class="w-5 h-5 text-mint-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-                <span class="text-mint-800">{{ note }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 建议 -->
-          <div v-if="dailyAnalysis.recommendations.length">
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-              AI 建议
-            </h4>
-            <div class="space-y-2">
-              <div
-                v-for="(rec, index) in dailyAnalysis.recommendations"
-                :key="index"
-                class="flex items-start gap-3 p-3 bg-primary-50 rounded-xl border border-primary-100"
-              >
-                <div class="w-6 h-6 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </div>
-                <span class="text-gray-700">{{ rec }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 个性化建议 -->
-        <div v-if="personalizedAdvice.length" class="card">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-10 h-10 bg-gradient-to-br from-mint-400 to-mint-600 rounded-xl flex items-center justify-center">
+      <div class="card">
+        <div class="flex items-center justify-between gap-4 flex-wrap mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-gradient-to-br from-lavender-400 to-lavender-600 rounded-xl flex items-center justify-center">
               <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
             </div>
             <div>
-              <h3 class="text-lg font-semibold text-gray-800">个性化健康建议</h3>
-              <p class="text-sm text-gray-500">基于您的健康数据生成的专属建议</p>
+              <h3 class="text-lg font-semibold text-gray-800">今日 AI 解读</h3>
+              <p class="text-sm text-gray-500">基于最近监测数据生成每日总结、提醒和建议</p>
             </div>
           </div>
-
-          <div class="space-y-4">
-            <div
-              v-for="advice in personalizedAdvice"
-              :key="advice.advice_id"
-              class="p-4 rounded-xl border"
-              :class="getPriorityColor(advice.priority)"
-            >
-              <div class="flex items-start justify-between mb-2">
-                <h4 class="font-semibold">{{ advice.title }}</h4>
-                <span class="text-xs px-2 py-1 rounded-full" :class="getPriorityColor(advice.priority)">
-                  {{ advice.priority === 'high' ? '重要' : advice.priority === 'medium' ? '建议' : '参考' }}
-                </span>
-              </div>
-              <p class="text-sm mb-3 opacity-90">{{ advice.content }}</p>
-              <div v-if="advice.action_items.length" class="space-y-1">
-                <p class="text-xs font-medium opacity-75">行动建议：</p>
-                <ul class="text-sm space-y-1">
-                  <li v-for="(item, idx) in advice.action_items" :key="idx" class="flex items-start gap-2">
-                    <span class="opacity-60">•</span>
-                    <span>{{ item }}</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 症状自查入口 -->
-        <div class="card">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl flex items-center justify-center">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-              </div>
-              <div>
-                <h3 class="text-lg font-semibold text-gray-800">症状自查</h3>
-                <p class="text-sm text-gray-500">记录症状，获取 AI 初步评估</p>
-              </div>
-            </div>
-            <button
-              @click="symptomCheckVisible = !symptomCheckVisible"
-              class="btn bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white"
-            >
-              {{ symptomCheckVisible ? '收起' : '开始自查' }}
-            </button>
-          </div>
-
-          <!-- 症状自查表单 -->
-          <div v-if="symptomCheckVisible" class="mt-6 pt-6 border-t border-warmGray-200">
-            <div class="space-y-4">
-              <!-- 症状选择 -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">选择您的症状（可多选）</label>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    v-for="symptom in commonSymptoms"
-                    :key="symptom"
-                    @click="symptomForm.symptoms.includes(symptom)
-                      ? symptomForm.symptoms = symptomForm.symptoms.filter(s => s !== symptom)
-                      : symptomForm.symptoms.push(symptom)"
-                    :class="[
-                      'px-3 py-2 rounded-lg text-sm border transition-all',
-                      symptomForm.symptoms.includes(symptom)
-                        ? 'bg-amber-100 border-amber-300 text-amber-800'
-                        : 'bg-warmGray-50 border-warmGray-200 text-gray-600 hover:bg-warmGray-100'
-                    ]"
-                  >
-                    {{ symptom }}
-                  </button>
-                </div>
-              </div>
-
-              <!-- 持续时间 -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">症状持续时间</label>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    v-for="option in durationOptions"
-                    :key="option.value"
-                    @click="symptomForm.duration = option.value"
-                    :class="[
-                      'px-4 py-2 rounded-lg text-sm border transition-all',
-                      symptomForm.duration === option.value
-                        ? 'bg-amber-100 border-amber-300 text-amber-800'
-                        : 'bg-warmGray-50 border-warmGray-200 text-gray-600 hover:bg-warmGray-100'
-                    ]"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
-              </div>
-
-              <!-- 严重程度 -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  严重程度：{{ symptomForm.severity }} / 5
-                </label>
-                <input
-                  type="range"
-                  v-model="symptomForm.severity"
-                  min="1"
-                  max="5"
-                  class="w-full h-2 bg-warmGray-200 rounded-lg appearance-none cursor-pointer"
-                />
-                <div class="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>轻微</span>
-                  <span>严重</span>
-                </div>
-              </div>
-
-              <!-- 操作按钮 -->
-              <div class="flex gap-3">
-                <button
-                  @click="checkSymptoms"
-                  :disabled="checkingSymptoms || symptomForm.symptoms.length === 0"
-                  class="btn bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white flex-1"
-                >
-                  <svg v-if="checkingSymptoms" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
-                  {{ checkingSymptoms ? '分析中...' : '获取评估' }}
-                </button>
-                <button @click="resetSymptomCheck" class="btn btn-ghost">
-                  重置
-                </button>
-              </div>
-            </div>
-
-            <!-- 症状自查结果 -->
-            <div v-if="symptomCheckResult" class="mt-6 p-4 bg-warmGray-50 rounded-xl space-y-4">
-              <div class="flex items-center justify-between">
-                <h4 class="font-semibold text-gray-800">评估结果</h4>
-                <span
-                  class="px-3 py-1 rounded-full text-sm font-medium"
-                  :class="getUrgencyColor(symptomCheckResult.urgency_level)"
-                >
-                  {{ getUrgencyLabel(symptomCheckResult.urgency_level) }}
-                </span>
-              </div>
-              <p class="text-gray-700">{{ symptomCheckResult.assessment }}</p>
-
-              <div v-if="symptomCheckResult.possible_causes.length">
-                <p class="text-sm font-medium text-gray-600 mb-2">可能原因：</p>
-                <ul class="text-sm text-gray-600 space-y-1">
-                  <li v-for="(cause, idx) in symptomCheckResult.possible_causes" :key="idx">• {{ cause }}</li>
-                </ul>
-              </div>
-
-              <div v-if="symptomCheckResult.recommendations.length">
-                <p class="text-sm font-medium text-gray-600 mb-2">建议措施：</p>
-                <ul class="text-sm text-gray-600 space-y-1">
-                  <li v-for="(rec, idx) in symptomCheckResult.recommendations" :key="idx">• {{ rec }}</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 无数据状态 -->
-        <div v-if="!dailyAnalysis && !loadingDailyAnalysis" class="card text-center py-16">
-          <div class="w-20 h-20 bg-gradient-to-br from-lavender-100 to-lavender-200 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg class="w-10 h-10 text-lavender-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-          </div>
-          <h3 class="text-lg font-semibold text-gray-700 mb-2">暂无今日数据</h3>
-          <p class="text-gray-500 mb-4">使用设备监测后将自动生成今日解读</p>
-          <button @click="loadDailyAnalysis" class="btn btn-primary">
-            刷新数据
+          <button
+            @click="loadDailyAnalysis()"
+            :disabled="loadingDailyAnalysis"
+            class="btn btn-ghost text-sm"
+          >
+            {{ loadingDailyAnalysis ? '刷新中...' : '刷新解读' }}
           </button>
         </div>
-      </template>
+
+        <div v-if="dailyAnalysisError" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {{ dailyAnalysisError }}
+        </div>
+
+        <div v-if="dailyAnalysis" class="space-y-5">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-sm text-gray-500">{{ dailyAnalysis.date }}</p>
+              <p class="text-base text-gray-700 leading-7 mt-1">{{ dailyAnalysis.summary }}</p>
+            </div>
+            <span
+              class="px-3 py-1.5 rounded-full text-sm font-medium"
+              :class="getTrendTone(dailyAnalysis.tremor_summary.trend)"
+            >
+              {{ getTrendLabel(dailyAnalysis.tremor_summary.trend) }}
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="rounded-2xl bg-warmGray-50 px-4 py-4 border border-warmGray-200">
+              <p class="text-sm text-gray-500">检测次数</p>
+              <p class="mt-2 text-2xl font-semibold text-gray-800">{{ dailyAnalysis.tremor_summary.total_detections }}</p>
+            </div>
+            <div class="rounded-2xl bg-warmGray-50 px-4 py-4 border border-warmGray-200">
+              <p class="text-sm text-gray-500">平均严重度</p>
+              <p class="mt-2 text-2xl font-semibold text-gray-800">{{ dailyAnalysis.tremor_summary.avg_severity }}</p>
+            </div>
+            <div class="rounded-2xl bg-warmGray-50 px-4 py-4 border border-warmGray-200">
+              <p class="text-sm text-gray-500">最高严重度</p>
+              <p class="mt-2 text-2xl font-semibold text-gray-800">{{ dailyAnalysis.tremor_summary.max_severity }}</p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-lavender-200 bg-lavender-50 px-4 py-4">
+            <p class="text-sm font-medium text-lavender-700">趋势对比</p>
+            <p class="mt-2 text-sm leading-6 text-gray-700">{{ dailyAnalysis.tremor_summary.comparison_text }}</p>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-2xl border border-primary-100 bg-primary-50 p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-3">关键观察</h4>
+              <ul class="space-y-2 text-sm text-gray-700">
+                <li v-for="(item, index) in dailyAnalysis.key_observations" :key="`observation-${index}`">• {{ item }}</li>
+              </ul>
+            </div>
+            <div class="rounded-2xl border border-mint-100 bg-mint-50 p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-3">建议</h4>
+              <ul class="space-y-2 text-sm text-gray-700">
+                <li v-for="(item, index) in dailyAnalysis.recommendations" :key="`recommendation-${index}`">• {{ item }}</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-3">关注点</h4>
+              <ul v-if="dailyAnalysis.concerns.length" class="space-y-2 text-sm text-gray-700">
+                <li v-for="(item, index) in dailyAnalysis.concerns" :key="`concern-${index}`">• {{ item }}</li>
+              </ul>
+              <p v-else class="text-sm text-gray-500">今日暂无额外风险提示。</p>
+            </div>
+            <div class="rounded-2xl border border-mint-100 bg-mint-50 p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-3">积极变化</h4>
+              <ul v-if="dailyAnalysis.positive_notes.length" class="space-y-2 text-sm text-gray-700">
+                <li v-for="(item, index) in dailyAnalysis.positive_notes" :key="`positive-${index}`">• {{ item }}</li>
+              </ul>
+              <p v-else class="text-sm text-gray-500">继续保持当前监测习惯。</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4" v-if="dailyAnalysis.medication_notes || dailyAnalysis.exercise_notes">
+            <div v-if="dailyAnalysis.medication_notes" class="rounded-2xl border border-warmGray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-2">用药提示</h4>
+              <p class="text-sm leading-6 text-gray-700">{{ dailyAnalysis.medication_notes }}</p>
+            </div>
+            <div v-if="dailyAnalysis.exercise_notes" class="rounded-2xl border border-warmGray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-2">运动提示</h4>
+              <p class="text-sm leading-6 text-gray-700">{{ dailyAnalysis.exercise_notes }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="!loadingDailyAnalysis" class="text-center py-12 text-gray-500">
+          暂无每日解读数据。
+        </div>
+      </div>
     </div>
 
     <!-- 就诊报告 -->
     <div v-else-if="activeTab === 'report'" class="space-y-6">
-      <!-- 报告生成控制 -->
       <div class="card">
-        <div class="flex items-center gap-3 mb-6">
-          <div class="w-10 h-10 bg-gradient-to-br from-lavender-400 to-lavender-600 rounded-xl flex items-center justify-center">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center">
             <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
           <div>
-            <h3 class="text-lg font-semibold text-gray-800">就诊报告生成器</h3>
-            <p class="text-sm text-gray-500">生成专业的数据摘要，方便与医生沟通</p>
+            <h3 class="text-lg font-semibold text-gray-800">就诊报告</h3>
+            <p class="text-sm text-gray-500">按时间范围生成给医生查看的 AI 汇总报告</p>
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-4">
-          <div class="flex items-center gap-3 bg-warmGray-50 rounded-xl px-4 py-2">
-            <span class="text-sm text-gray-600">报告周期:</span>
-            <select v-model="reportDays" class="bg-transparent border-none text-sm font-medium text-gray-700 focus:outline-none cursor-pointer">
-              <option :value="7">最近7天</option>
-              <option :value="14">最近14天</option>
-              <option :value="30">最近30天</option>
-              <option :value="90">最近3个月</option>
-            </select>
-          </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <label class="block">
+            <span class="text-sm text-gray-600">开始日期</span>
+            <input v-model="doctorReportRange.start" type="date" class="input mt-2" />
+          </label>
+          <label class="block">
+            <span class="text-sm text-gray-600">结束日期</span>
+            <input v-model="doctorReportRange.end" type="date" class="input mt-2" />
+          </label>
           <button
             @click="generateDoctorReport"
-            :disabled="generatingReport"
-            class="btn bg-gradient-to-r from-lavender-500 to-lavender-600 hover:from-lavender-600 hover:to-lavender-700 text-white"
+            :disabled="doctorReportLoading"
+            class="btn bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white"
           >
-            <svg v-if="generatingReport" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            {{ generatingReport ? '生成中...' : '生成报告' }}
+            {{ doctorReportLoading ? '生成中...' : '生成就诊报告' }}
           </button>
         </div>
-      </div>
 
-      <!-- 报告内容 -->
-      <div v-if="doctorReport" class="space-y-6">
-        <!-- 报告头部 -->
-        <div class="card">
-          <div class="flex items-center justify-between mb-6">
-            <div>
-              <h3 class="text-xl font-bold text-gray-800">{{ APP_NAME }} - Clinical report</h3>
-              <p class="text-sm text-gray-500">
-                报告周期：{{ doctorReport.period.start }} 至 {{ doctorReport.period.end }}（共 {{ doctorReport.period.days }} 天）
-              </p>
-            </div>
-            <button
-              @click="downloadReportPDF"
-              class="btn bg-gradient-to-r from-mint-500 to-mint-600 hover:from-mint-600 hover:to-mint-700 text-white"
-            >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              导出 PDF
-            </button>
-          </div>
-
-          <!-- 患者信息 -->
-          <div class="bg-warmGray-50 rounded-xl p-4 mb-6">
-            <h4 class="font-medium text-gray-700 mb-3">患者信息</h4>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <span class="text-gray-500">姓名：</span>
-                <span class="font-medium">{{ doctorReport.patient_info.name }}</span>
-              </div>
-              <div v-if="doctorReport.patient_info.age">
-                <span class="text-gray-500">年龄：</span>
-                <span class="font-medium">{{ doctorReport.patient_info.age }} 岁</span>
-              </div>
-              <div v-if="doctorReport.patient_info.diagnosis_years">
-                <span class="text-gray-500">确诊时长：</span>
-                <span class="font-medium">{{ doctorReport.patient_info.diagnosis_years }} 年</span>
-              </div>
-              <div v-if="doctorReport.patient_info.hoehn_yahr_stage">
-                <span class="text-gray-500">H-Y分期：</span>
-                <span class="font-medium">{{ doctorReport.patient_info.hoehn_yahr_stage }} 期</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 执行摘要 -->
-          <div>
-            <h4 class="font-medium text-gray-700 mb-3">摘要</h4>
-            <p class="text-gray-600 leading-relaxed">{{ doctorReport.summary.executive_summary }}</p>
-          </div>
+        <div v-if="doctorReportError" class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {{ doctorReportError }}
         </div>
 
-        <!-- 关键指标 -->
-        <div class="card">
-          <h4 class="font-semibold text-gray-800 mb-4">关键指标</h4>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div v-if="doctorReport" class="mt-6 space-y-5">
+          <div class="rounded-2xl bg-warmGray-50 border border-warmGray-200 p-4">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p class="text-sm text-gray-500">报告周期</p>
+                <p class="text-base font-medium text-gray-800 mt-1">
+                  {{ doctorReport.period.start }} 至 {{ doctorReport.period.end }}
+                </p>
+              </div>
+              <span class="text-xs text-gray-500">
+                生成时间：{{ doctorReport.generated_at }}
+              </span>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-gray-700">{{ doctorReport.summary.executive_summary }}</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div
               v-for="metric in doctorReport.summary.key_metrics"
               :key="metric.metric"
-              class="bg-gradient-to-br from-lavender-50 to-warmGray-50 rounded-xl p-4 border border-lavender-100"
+              class="rounded-2xl border border-primary-100 bg-primary-50 p-4"
             >
-              <p class="text-sm text-gray-500 mb-1">{{ metric.metric }}</p>
-              <p class="text-xl font-bold text-gray-800">{{ metric.value }}</p>
-              <p class="text-xs text-gray-500 mt-1">{{ metric.trend }}</p>
+              <p class="text-sm text-gray-500">{{ metric.metric }}</p>
+              <p class="mt-2 text-lg font-semibold text-gray-800">{{ metric.value }}</p>
+              <p class="mt-1 text-xs text-gray-500">{{ metric.trend }}</p>
             </div>
           </div>
-        </div>
 
-        <!-- 震颤分析 -->
-        <div class="card">
-          <h4 class="font-semibold text-gray-800 mb-4">震颤数据分析</h4>
-          <p class="text-gray-600 mb-4">{{ doctorReport.tremor_analysis.frequency_analysis }}</p>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-2xl border border-lavender-100 bg-lavender-50 p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-3">震颤分析</h4>
+              <p class="text-sm leading-6 text-gray-700">{{ doctorReport.tremor_analysis.frequency_analysis }}</p>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <span
+                  v-for="(count, level) in doctorReport.tremor_analysis.severity_distribution"
+                  :key="`severity-${level}`"
+                  class="px-3 py-1.5 rounded-full bg-white border border-lavender-200 text-xs text-gray-700"
+                >
+                  严重度 {{ level }}: {{ count }}
+                </span>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-mint-100 bg-mint-50 p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-3">AI 观察</h4>
+              <ul class="space-y-2 text-sm text-gray-700">
+                <li v-for="(item, index) in doctorReport.ai_observations" :key="`observation-${index}`">• {{ item }}</li>
+              </ul>
+            </div>
+          </div>
 
-          <div v-if="doctorReport.tremor_analysis.peak_times.length" class="mb-4">
-            <p class="text-sm font-medium text-gray-600 mb-2">高发时段：</p>
-            <div class="flex flex-wrap gap-2">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-2xl border border-warmGray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-3">高发时段与模式</h4>
+              <div class="flex flex-wrap gap-2 mb-3">
+                <span
+                  v-for="time in doctorReport.tremor_analysis.peak_times"
+                  :key="time"
+                  class="px-3 py-1.5 rounded-full bg-warmGray-100 text-xs text-gray-700"
+                >
+                  {{ time }}
+                </span>
+              </div>
+              <ul class="space-y-2 text-sm text-gray-700">
+                <li v-for="(item, index) in doctorReport.tremor_analysis.notable_patterns" :key="`pattern-${index}`">• {{ item }}</li>
+              </ul>
+            </div>
+            <div class="rounded-2xl border border-warmGray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-800 mb-3">建议和问诊问题</h4>
+              <ul class="space-y-2 text-sm text-gray-700">
+                <li v-for="(item, index) in doctorReport.questions_for_doctor" :key="`question-${index}`">• {{ item }}</li>
+              </ul>
+            </div>
+          </div>
+
+          <div v-if="doctorReport.medication_analysis" class="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+            <h4 class="text-sm font-semibold text-gray-800 mb-3">用药分析</h4>
+            <p class="text-sm text-gray-700 mb-3">{{ doctorReport.medication_analysis.effectiveness_summary }}</p>
+            <div class="flex flex-wrap gap-2 mb-3">
               <span
-                v-for="time in doctorReport.tremor_analysis.peak_times"
-                :key="time"
-                class="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm"
+                v-for="medication in doctorReport.medication_analysis.current_medications"
+                :key="medication"
+                class="px-3 py-1.5 rounded-full bg-white border border-amber-200 text-xs text-gray-700"
               >
-                {{ time }}
+                {{ medication }}
               </span>
             </div>
-          </div>
-
-          <div v-if="doctorReport.tremor_analysis.notable_patterns.length">
-            <p class="text-sm font-medium text-gray-600 mb-2">显著模式：</p>
-            <ul class="text-sm text-gray-600 space-y-1">
-              <li v-for="(pattern, idx) in doctorReport.tremor_analysis.notable_patterns" :key="idx">
-                • {{ pattern }}
-              </li>
+            <ul class="space-y-2 text-sm text-gray-700">
+              <li v-for="(item, index) in doctorReport.medication_analysis.concerns" :key="`med-concern-${index}`">• {{ item }}</li>
             </ul>
           </div>
         </div>
-
-        <!-- 用药分析 -->
-        <div v-if="doctorReport.medication_analysis" class="card">
-          <h4 class="font-semibold text-gray-800 mb-4">用药情况</h4>
-          <div v-if="doctorReport.medication_analysis.current_medications.length" class="mb-4">
-            <p class="text-sm font-medium text-gray-600 mb-2">当前用药：</p>
-            <div class="flex flex-wrap gap-2">
-              <span
-                v-for="med in doctorReport.medication_analysis.current_medications"
-                :key="med"
-                class="px-3 py-1 bg-lavender-100 text-lavender-700 rounded-full text-sm"
-              >
-                {{ med }}
-              </span>
-            </div>
-          </div>
-          <p class="text-gray-600 mb-4">{{ doctorReport.medication_analysis.effectiveness_summary }}</p>
-          <div v-if="doctorReport.medication_analysis.concerns.length">
-            <p class="text-sm font-medium text-amber-600 mb-2">注意事项：</p>
-            <ul class="text-sm text-amber-700 space-y-1">
-              <li v-for="(concern, idx) in doctorReport.medication_analysis.concerns" :key="idx">
-                • {{ concern }}
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- 运动康复分析 -->
-        <div v-if="doctorReport.exercise_analysis" class="card">
-          <h4 class="font-semibold text-gray-800 mb-4">运动康复情况</h4>
-          <div class="grid grid-cols-3 gap-4 mb-4">
-            <div class="text-center">
-              <p class="text-2xl font-bold text-mint-600">{{ doctorReport.exercise_analysis.compliance_rate }}%</p>
-              <p class="text-sm text-gray-500">训练完成率</p>
-            </div>
-          </div>
-          <div v-if="doctorReport.exercise_analysis.observed_benefits.length">
-            <p class="text-sm font-medium text-gray-600 mb-2">观察到的改善：</p>
-            <ul class="text-sm text-gray-600 space-y-1">
-              <li v-for="(benefit, idx) in doctorReport.exercise_analysis.observed_benefits" :key="idx">
-                • {{ benefit }}
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- AI 观察 -->
-        <div class="card">
-          <h4 class="font-semibold text-gray-800 mb-4">AI 观察与建议</h4>
-          <ul class="space-y-2">
-            <li
-              v-for="(obs, idx) in doctorReport.ai_observations"
-              :key="idx"
-              class="flex items-start gap-3 p-3 bg-lavender-50 rounded-xl"
-            >
-              <div class="w-6 h-6 bg-lavender-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <svg class="w-4 h-4 text-lavender-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
-              <span class="text-gray-700">{{ obs }}</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- 就诊问题建议 -->
-        <div v-if="doctorReport.questions_for_doctor.length" class="card">
-          <h4 class="font-semibold text-gray-800 mb-4">建议与医生讨论的问题</h4>
-          <ul class="space-y-2">
-            <li
-              v-for="(question, idx) in doctorReport.questions_for_doctor"
-              :key="idx"
-              class="flex items-start gap-3 p-3 bg-primary-50 rounded-xl"
-            >
-              <div class="w-6 h-6 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <span class="text-primary-600 text-sm font-medium">{{ idx + 1 }}</span>
-              </div>
-              <span class="text-gray-700">{{ question }}</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- 免责声明 -->
-        <div class="bg-gradient-to-r from-amber-50 to-warmGray-50 border border-amber-200 rounded-2xl p-5">
-          <div class="flex items-start gap-3">
-            <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div>
-              <p class="font-semibold text-amber-800 mb-1">免责声明</p>
-              <p class="text-sm text-amber-700 leading-relaxed">
-                本报告由 AI 根据用户数据自动生成，仅供参考，不能作为医学诊断依据。
-                所有分析和建议需由专业医生审核确认。请在就诊时将此报告作为参考资料与医生沟通。
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 空状态 -->
-      <div v-else-if="!generatingReport" class="card text-center py-16">
-        <div class="w-20 h-20 bg-gradient-to-br from-lavender-100 to-lavender-200 rounded-full flex items-center justify-center mx-auto mb-6">
-          <svg class="w-10 h-10 text-lavender-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-700 mb-2">生成就诊报告</h3>
-        <p class="text-gray-500 mb-4">选择报告周期，生成专业的数据摘要报告</p>
-        <p class="text-sm text-gray-400">报告将包含震颤数据分析、用药情况、运动康复情况等信息</p>
-      </div>
-    </div>
-
-    <!-- 数据分析 -->
-    <div v-else-if="activeTab === 'analysis'" class="space-y-6">
-      <!-- 分析控制 -->
-      <div class="card">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 bg-gradient-to-br from-lavender-400 to-lavender-600 rounded-xl flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-lg font-semibold text-gray-800">AI 智能分析</h3>
-            <p class="text-sm text-gray-500">使用 AI 对您的震颤数据进行深度分析</p>
-          </div>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-4">
-          <div class="flex items-center gap-3 bg-warmGray-50 rounded-xl px-4 py-2">
-            <span class="text-sm text-gray-600">分析范围:</span>
-            <select v-model="analysisDays" class="bg-transparent border-none text-sm font-medium text-gray-700 focus:outline-none cursor-pointer">
-              <option :value="7">最近7天</option>
-              <option :value="14">最近14天</option>
-              <option :value="30">最近30天</option>
-            </select>
-          </div>
-          <button
-            @click="runAnalysis"
-            :disabled="isAnalyzing"
-            class="btn bg-gradient-to-r from-lavender-500 to-lavender-600 hover:from-lavender-600 hover:to-lavender-700 text-white"
-          >
-            <svg v-if="isAnalyzing" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            {{ isAnalyzing ? '分析中...' : '开始分析' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 分析结果 -->
-      <div v-if="analysisResult" class="space-y-6">
-        <!-- 风险等级 -->
-        <div class="card">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2">
-              <div class="w-8 h-8 bg-lavender-100 rounded-lg flex items-center justify-center">
-                <svg class="w-4 h-4 text-lavender-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 class="text-lg font-semibold text-gray-800">分析结果</h3>
-            </div>
-            <span
-              class="px-4 py-1.5 rounded-full text-sm font-medium"
-              :class="getRiskColor(analysisResult.risk_level)"
-            >
-              风险等级: {{ getRiskLabel(analysisResult.risk_level) }}
-            </span>
-          </div>
-          <p class="text-gray-700 leading-relaxed">{{ analysisResult.summary }}</p>
-        </div>
-
-        <!-- 关键发现 -->
-        <div class="card">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
-              <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <h3 class="text-lg font-semibold text-gray-800">关键发现</h3>
-          </div>
-          <ul class="space-y-3">
-            <li
-              v-for="(finding, index) in analysisResult.key_findings"
-              :key="index"
-              class="flex items-start gap-3 p-3 bg-primary-50 rounded-xl animate-fade-in-up"
-              :style="{ animationDelay: `${index * 100}ms` }"
-            >
-              <div class="w-6 h-6 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4" />
-                </svg>
-              </div>
-              <span class="text-gray-700">{{ finding }}</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- 建议 -->
-        <div class="card">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="w-8 h-8 bg-mint-100 rounded-lg flex items-center justify-center">
-              <svg class="w-4 h-4 text-mint-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <h3 class="text-lg font-semibold text-gray-800">建议</h3>
-          </div>
-          <ul class="space-y-3">
-            <li
-              v-for="(rec, index) in analysisResult.recommendations"
-              :key="index"
-              class="flex items-start gap-3 p-3 bg-mint-50 rounded-xl animate-fade-in-up"
-              :style="{ animationDelay: `${index * 100}ms` }"
-            >
-              <div class="w-6 h-6 bg-mint-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-mint-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <span class="text-gray-700">{{ rec }}</span>
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- 空状态 -->
-      <div v-else-if="!isAnalyzing" class="card text-center py-16">
-        <div class="w-20 h-20 bg-gradient-to-br from-lavender-100 to-lavender-200 rounded-full flex items-center justify-center mx-auto mb-6">
-          <svg class="w-10 h-10 text-lavender-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-700 mb-2">开始智能分析</h3>
-        <p class="text-gray-500">点击"开始分析"获取 AI 智能分析报告</p>
       </div>
     </div>
 
@@ -1448,6 +888,109 @@ onMounted(async () => {
                 </svg>
               </div>
               <span class="text-gray-700 leading-relaxed">{{ tip }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 症状自查 -->
+        <div class="card">
+          <div class="flex items-center gap-2 mb-6">
+            <div class="w-8 h-8 bg-mint-100 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-mint-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800">症状自查</h3>
+              <p class="text-sm text-gray-500">输入当前症状和诱因，获取 AI 参考建议</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <label class="block lg:col-span-2">
+              <span class="text-sm text-gray-600">症状</span>
+              <textarea
+                v-model="symptomInput"
+                rows="3"
+                class="input mt-2 min-h-[96px]"
+                placeholder="例如：手部震颤、行动迟缓、僵硬"
+              />
+            </label>
+            <label class="block">
+              <span class="text-sm text-gray-600">持续时间</span>
+              <select v-model="symptomDuration" class="input mt-2">
+                <option value="hours">几小时内</option>
+                <option value="days">几天</option>
+                <option value="weeks">几周</option>
+                <option value="months">几个月</option>
+                <option value="ongoing">长期存在</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-sm text-gray-600">主观严重程度：{{ symptomSeverity }}/5</span>
+              <input v-model.number="symptomSeverity" type="range" min="1" max="5" step="1" class="mt-4 w-full" />
+            </label>
+            <label class="block lg:col-span-2">
+              <span class="text-sm text-gray-600">相关因素</span>
+              <input
+                v-model="associatedFactorsInput"
+                type="text"
+                class="input mt-2"
+                placeholder="例如：疲劳、睡眠不足、压力大"
+              />
+            </label>
+          </div>
+
+          <div class="mt-4 flex justify-end">
+            <button
+              @click="runSymptomCheck"
+              :disabled="symptomCheckLoading"
+              class="btn bg-gradient-to-r from-mint-500 to-mint-600 hover:from-mint-600 hover:to-mint-700 text-white"
+            >
+              {{ symptomCheckLoading ? '分析中...' : '开始自查' }}
+            </button>
+          </div>
+
+          <div v-if="symptomCheckError" class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            {{ symptomCheckError }}
+          </div>
+
+          <div v-if="symptomCheckResult" class="mt-6 space-y-4">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <p class="text-sm leading-6 text-gray-700 max-w-3xl">{{ symptomCheckResult.assessment }}</p>
+              <span
+                class="px-3 py-1.5 rounded-full text-sm font-medium"
+                :class="getUrgencyTone(symptomCheckResult.urgency_level)"
+              >
+                {{ getUrgencyLabel(symptomCheckResult.urgency_level) }}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div class="rounded-2xl border border-warmGray-200 bg-white p-4">
+                <h4 class="text-sm font-semibold text-gray-800 mb-3">可能原因</h4>
+                <ul class="space-y-2 text-sm text-gray-700">
+                  <li v-for="(item, index) in symptomCheckResult.possible_causes" :key="`cause-${index}`">• {{ item }}</li>
+                </ul>
+              </div>
+              <div class="rounded-2xl border border-warmGray-200 bg-white p-4">
+                <h4 class="text-sm font-semibold text-gray-800 mb-3">建议</h4>
+                <ul class="space-y-2 text-sm text-gray-700">
+                  <li v-for="(item, index) in symptomCheckResult.recommendations" :key="`symptom-rec-${index}`">• {{ item }}</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-3">
+              <span class="px-3 py-1.5 rounded-full bg-lavender-100 text-lavender-700 text-sm">
+                帕金森相关性：{{ symptomCheckResult.related_to_parkinsons_likelihood }}
+              </span>
+              <span
+                class="px-3 py-1.5 rounded-full text-sm"
+                :class="symptomCheckResult.should_see_doctor ? 'bg-amber-100 text-amber-700' : 'bg-mint-100 text-mint-700'"
+              >
+                {{ symptomCheckResult.should_see_doctor ? '建议就医沟通' : '可继续观察记录' }}
+              </span>
             </div>
           </div>
         </div>

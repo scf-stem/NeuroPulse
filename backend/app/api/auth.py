@@ -31,6 +31,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 DEMO_ACCESS_TOKEN = "neuro-pulse-demo-token"
 
 
+def demo_token_enabled() -> bool:
+    return settings.APP_ENV != "production"
+
+
 # ============================================================
 # Pydantic Schemas
 # ============================================================
@@ -174,7 +178,7 @@ async def get_current_user_from_token(
         detail=msg(get_locale(request), "auth.invalid_credentials"),
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if token == DEMO_ACCESS_TOKEN:
+    if token == DEMO_ACCESS_TOKEN and demo_token_enabled():
         return build_demo_user()
 
     try:

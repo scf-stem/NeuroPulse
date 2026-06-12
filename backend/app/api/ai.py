@@ -16,10 +16,10 @@ from datetime import datetime, timedelta
 from typing import Any, List, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user_from_token
@@ -771,3 +771,376 @@ async def get_health_tips(
         if user_data["detection_rate"] > 40:
             tips.insert(0, "震颤较为频繁，建议记录发作时间和环境因素")
     return {"tips": tips, "personalized": personalized, "generated_at": datetime.utcnow()}
+
+
+# ============================================================
+# 个性化解读 (Daily Analysis)
+# ============================================================
+
+class TremorSummary(BaseModel):
+    total_detections: int
+    avg_severity: float
+    max_severity: int
+    trend: Literal["better", "same", "worse"]
+    comparison_text: str
+
+
+class DailyAnalysisResponse(BaseModel):
+    date: str
+    summary: str
+    tremor_summary: TremorSummary
+    key_observations: List[str]
+    concerns: List[str]
+    positive_notes: List[str]
+    recommendations: List[str]
+    medication_notes: Optional[str] = None
+    exercise_notes: Optional[str] = None
+    generated_at: str
+
+
+@router.get("/daily-analysis", response_model=DailyAnalysisResponse)
+async def get_daily_analysis(
+    request_http: Request,
+    current_user: User = Depends(get_current_user_from_token),
+    db: AsyncSession = Depends(get_db),
+    date: Optional[str] = None,
+):
+    """生成指定日期（默认今日）的 AI 智能解读。"""
+    locale = get_locale(request_http)
+    user_data = await get_user_data_summary(db, current_user.id, days=1)
+    med_summary = await get_medication_summary(db, current_user.id, days=1)
+
+    target_date = date or datetime.utcnow().strftime("%Y-%m-%d")
+
+    prompt = f"""请根据以下今日（{target_date}）帕金森患者的监测数据，生成一份个性化解读报告。
+
+震颤数据：
+- 检测次数: {user_data['total_analyses']}
+- 震颤次数: {user_data['tremor_count']}
+- 平均严重度: {user_data['avg_severity']}
+- 最高严重度: {user_data['max_severity']}
+
+用药情况：
+- 当前药物: {', '.join(med_summary['current_medications']) or '未记录'}
+- 服药记录: {med_summary['record_count']} 条
+
+请以 JSON 格式输出，字段如下：
+{{
+  "summary": "一句话总结",
+  "tremor_summary": {{
+    "total_detections": 数字,
+    "avg_severity": 数字,
+    "max_severity": 数字,
+    "trend": "better|same|worse",
+    "comparison_text": "与昨日对比文字"
+  }},
+  "key_observations": ["观察1", "观察2"],
+  "concerns": ["注意事项1"],
+  "positive_notes": ["积极面1"],
+  "recommendations": ["建议1", "建议2"],
+  "medication_notes": "用药提示或null",
+  "exercise_notes": "运动提示或null"
+}}"""
+
+    response_text = await call_qwen_api(
+        [{"role": "user", "content": prompt}],
+        "你是专业的帕金森病健康数据分析助手，提供数据解读但不做医学诊断。",
+        locale,
+        response_format={"type": "json_object"},
+    )
+
+    now_str = datetime.utcnow().isoformat()
+    try:
+        start = response_text.find("{")
+        end = response_text.rfind("}") + 1
+        parsed = json.loads(response_text[start:end])
+        tremor_raw = parsed.get("tremor_summary", {})
+        return DailyAnalysisResponse(
+            date=target_date,
+            summary=parsed.get("summary", "解读完成"),
+            tremor_summary=TremorSummary(
+                total_detections=tremor_raw.get("total_detections", user_data["total_analyses"]),
+                avg_severity=tremor_raw.get("avg_severity", user_data["avg_severity"]),
+                max_severity=tremor_raw.get("max_severity", user_data["max_severity"]),
+                trend=tremor_raw.get("trend", "same"),
+                comparison_text=tremor_raw.get("comparison_text", "暂无对比数据"),
+            ),
+            key_observations=parsed.get("key_observations", ["暂无数据"]),
+            concerns=parsed.get("concerns", []),
+            positive_notes=parsed.get("positive_notes", []),
+            recommendations=parsed.get("recommendations", ["继续监测"]),
+            medication_notes=parsed.get("medication_notes"),
+            exercise_notes=parsed.get("exercise_notes"),
+            generated_at=now_str,
+        )
+    except Exception:  # noqa: BLE001
+        return DailyAnalysisResponse(
+            date=target_date,
+            summary=response_text[:200],
+            tremor_summary=TremorSummary(
+                total_detections=user_data["total_analyses"],
+                avg_severity=user_data["avg_severity"],
+                max_severity=user_data["max_severity"],
+                trend="same",
+                comparison_text="解析失败，请稍后重试",
+            ),
+            key_observations=["AI 解读已完成"],
+            concerns=[],
+            positive_notes=[],
+            recommendations=["如有疑问请咨询医生"],
+            generated_at=now_str,
+        )
+
+
+# ============================================================
+# 就诊报告 (Doctor Visit Report)
+# ============================================================
+
+class DoctorReportRequest(BaseModel):
+    start_date: str  # YYYY-MM-DD
+    end_date: str    # YYYY-MM-DD
+
+
+class KeyMetric(BaseModel):
+    metric: str
+    value: str
+    trend: str
+
+
+class ReportSummary(BaseModel):
+    executive_summary: str
+    key_metrics: List[KeyMetric]
+
+
+class TremorAnalysisSection(BaseModel):
+    frequency_analysis: str
+    severity_distribution: dict[str, int]
+    peak_times: List[str]
+    notable_patterns: List[str]
+
+
+class MedicationAnalysisSection(BaseModel):
+    current_medications: List[str]
+    effectiveness_summary: str
+    concerns: List[str]
+
+
+class DailySummary(BaseModel):
+    date: str
+    detections: int
+    avg_severity: float
+
+
+class DataAppendix(BaseModel):
+    daily_summaries: List[DailySummary]
+
+
+class DoctorVisitReportResponse(BaseModel):
+    report_id: str
+    generated_at: str
+    period: dict[str, Any]
+    patient_info: dict[str, Any]
+    summary: ReportSummary
+    tremor_analysis: TremorAnalysisSection
+    medication_analysis: Optional[MedicationAnalysisSection] = None
+    ai_observations: List[str]
+    questions_for_doctor: List[str]
+    data_appendix: DataAppendix
+
+
+@router.post("/doctor-report", response_model=DoctorVisitReportResponse)
+async def generate_doctor_report(
+    request_http: Request,
+    request: DoctorReportRequest,
+    current_user: User = Depends(get_current_user_from_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """生成就诊报告，汇总指定周期内的震颤数据和用药情况。"""
+    locale = get_locale(request_http)
+
+    try:
+        start_dt = datetime.strptime(request.start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(request.end_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD")
+
+    days = max(1, (end_dt - start_dt).days)
+    user_data = await get_user_data_summary(db, current_user.id, days=days)
+    med_summary = await get_medication_summary(db, current_user.id, days=days)
+
+    prompt = f"""请根据以下帕金森患者的监测数据（{request.start_date} 至 {request.end_date}，共 {days} 天），生成一份就诊报告。
+
+震颤数据汇总：
+- 检测会话: {user_data['total_sessions']} 次
+- 总检测次数: {user_data['total_analyses']}
+- 震颤次数: {user_data['tremor_count']}
+- 震颤检出率: {user_data['detection_rate']}%
+- 平均严重度: {user_data['avg_severity']}
+- 最高严重度: {user_data['max_severity']}
+
+用药情况：
+- 当前药物: {', '.join(med_summary['current_medications']) or '未记录'}
+- 服药记录数: {med_summary['record_count']}
+
+请以 JSON 格式输出：
+{{
+  "executive_summary": "总结性描述",
+  "key_metrics": [{{"metric": "指标名", "value": "数值", "trend": "趋势描述"}}],
+  "frequency_analysis": "频率分析文字",
+  "severity_distribution": {{"0": 数量, "1": 数量, "2": 数量, "3": 数量, "4": 数量}},
+  "peak_times": ["高发时段"],
+  "notable_patterns": ["规律1"],
+  "effectiveness_summary": "用药效果描述",
+  "medication_concerns": ["注意事项"],
+  "ai_observations": ["观察1", "观察2"],
+  "questions_for_doctor": ["问题1", "问题2"]
+}}"""
+
+    response_text = await call_qwen_api(
+        [{"role": "user", "content": prompt}],
+        "你是专业的帕金森病数据分析助手，生成供患者与医生沟通使用的数据摘要报告，不做诊断。",
+        locale,
+        response_format={"type": "json_object"},
+    )
+
+    now_str = datetime.utcnow().isoformat()
+    report_id = str(uuid.uuid4())
+
+    try:
+        start = response_text.find("{")
+        end = response_text.rfind("}") + 1
+        parsed = json.loads(response_text[start:end])
+    except Exception:  # noqa: BLE001
+        parsed = {}
+
+    sev_dist_raw = parsed.get("severity_distribution", {})
+    sev_dist = {str(k): int(v) for k, v in sev_dist_raw.items()} if sev_dist_raw else {}
+
+    med_analysis = None
+    if med_summary["current_medications"]:
+        med_analysis = MedicationAnalysisSection(
+            current_medications=med_summary["current_medications"],
+            effectiveness_summary=parsed.get("effectiveness_summary", "数据不足，无法评估"),
+            concerns=parsed.get("medication_concerns", []),
+        )
+
+    return DoctorVisitReportResponse(
+        report_id=report_id,
+        generated_at=now_str,
+        period={"start": request.start_date, "end": request.end_date, "days": days},
+        patient_info={"name": current_user.username},
+        summary=ReportSummary(
+            executive_summary=parsed.get("executive_summary", "报告生成完毕"),
+            key_metrics=[
+                KeyMetric(**m) for m in parsed.get("key_metrics", [])
+                if isinstance(m, dict) and "metric" in m and "value" in m and "trend" in m
+            ],
+        ),
+        tremor_analysis=TremorAnalysisSection(
+            frequency_analysis=parsed.get("frequency_analysis", "暂无频率分析"),
+            severity_distribution=sev_dist,
+            peak_times=parsed.get("peak_times", []),
+            notable_patterns=parsed.get("notable_patterns", []),
+        ),
+        medication_analysis=med_analysis,
+        ai_observations=parsed.get("ai_observations", ["AI 分析已完成"]),
+        questions_for_doctor=parsed.get("questions_for_doctor", []),
+        data_appendix=DataAppendix(daily_summaries=[]),
+    )
+
+
+# ============================================================
+# 症状自查 (Symptom Check)
+# ============================================================
+
+class SymptomCheckRequest(BaseModel):
+    symptoms: List[str]
+    duration: str
+    severity: int  # 1-5
+    associated_factors: Optional[List[str]] = None
+
+
+class SymptomCheckResponse(BaseModel):
+    assessment: str
+    possible_causes: List[str]
+    urgency_level: Literal["routine", "soon", "urgent"]
+    recommendations: List[str]
+    should_see_doctor: bool
+    related_to_parkinsons_likelihood: Literal["low", "medium", "high"]
+
+
+@router.post("/symptom-check", response_model=SymptomCheckResponse)
+async def check_symptoms(
+    request_http: Request,
+    request: SymptomCheckRequest,
+    current_user: User = Depends(get_current_user_from_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """症状自查：用户描述症状，AI 给出初步判断和就医建议。"""
+    if not request.symptoms:
+        raise HTTPException(status_code=422, detail="请至少选择一个症状")
+
+    locale = get_locale(request_http)
+    factors_text = "、".join(request.associated_factors) if request.associated_factors else "无"
+    symptoms_text = "、".join(request.symptoms)
+
+    duration_map = {
+        "hours": "几小时内",
+        "days": "几天",
+        "weeks": "几周",
+        "months": "几个月",
+        "ongoing": "长期存在",
+    }
+    duration_label = duration_map.get(request.duration, request.duration)
+
+    prompt = f"""以下是一位帕金森患者的症状自查信息：
+
+症状：{symptoms_text}
+持续时间：{duration_label}
+严重程度：{request.severity}/5
+相关因素：{factors_text}
+
+请以 JSON 格式给出初步判断（注意：不做诊断，只提供参考建议）：
+{{
+  "assessment": "初步评估描述",
+  "possible_causes": ["可能原因1", "可能原因2"],
+  "urgency_level": "routine|soon|urgent",
+  "recommendations": ["建议1", "建议2"],
+  "should_see_doctor": true,
+  "related_to_parkinsons_likelihood": "low|medium|high"
+}}"""
+
+    response_text = await call_qwen_api(
+        [{"role": "user", "content": prompt}],
+        "你是帕金森病健康助手，提供症状参考评估，明确告知用户这不是医学诊断。",
+        locale,
+        response_format={"type": "json_object"},
+    )
+
+    try:
+        start = response_text.find("{")
+        end = response_text.rfind("}") + 1
+        parsed = json.loads(response_text[start:end])
+        urgency = parsed.get("urgency_level", "routine")
+        if urgency not in ("routine", "soon", "urgent"):
+            urgency = "routine"
+        likelihood = parsed.get("related_to_parkinsons_likelihood", "medium")
+        if likelihood not in ("low", "medium", "high"):
+            likelihood = "medium"
+        return SymptomCheckResponse(
+            assessment=parsed.get("assessment", "评估完成"),
+            possible_causes=parsed.get("possible_causes", []),
+            urgency_level=urgency,
+            recommendations=parsed.get("recommendations", ["建议咨询医生"]),
+            should_see_doctor=bool(parsed.get("should_see_doctor", True)),
+            related_to_parkinsons_likelihood=likelihood,
+        )
+    except Exception:  # noqa: BLE001
+        return SymptomCheckResponse(
+            assessment=response_text[:300],
+            possible_causes=[],
+            urgency_level="routine",
+            recommendations=["建议咨询专业医生"],
+            should_see_doctor=True,
+            related_to_parkinsons_likelihood="medium",
+        )

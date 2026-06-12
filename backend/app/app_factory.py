@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import ai, analysis, auth, config, data, device, health, medication, rehabilitation, report, test
 from app.core.config import settings
 from app.core.database import close_db, init_db
+from app.core.security import assert_safe_production_settings
 from app.core.i18n import get_locale, msg
 
 AppMode = Literal["full", "vercel"]
@@ -25,7 +26,9 @@ def _make_lifespan(mode: AppMode):
         print(f"🚀 {settings.APP_NAME} booting in {mode} mode")
         print(f"📊 environment: {settings.APP_ENV}")
 
-        should_init_db = mode != "vercel" and settings.AUTO_INIT_DB
+        assert_safe_production_settings(settings)
+
+        should_init_db = mode != "vercel" and settings.AUTO_INIT_DB and settings.APP_ENV != "production"
         if should_init_db:
             await init_db()
             print("✅ database initialized from SQLAlchemy metadata")
@@ -43,10 +46,7 @@ def _make_lifespan(mode: AppMode):
 def _base_app(mode: AppMode, docs_url: str | None, redoc_url: str | None) -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
-        description=(
-            "Neuro Pulse backend APIs for device ingestion, tremor analysis, "
-            "care workflows, and AI-assisted reporting."
-        ),
+        description="Parkinson's Tremor Monitoring Backend",
         version="1.0.0",
         lifespan=_make_lifespan(mode),
         docs_url=docs_url,
@@ -72,7 +72,8 @@ def _register_api_routes(app: FastAPI, base_prefix: str) -> None:
     app.include_router(medication.router, prefix=f"{base_prefix}/medication", tags=["Medication"])
     app.include_router(rehabilitation.router, prefix=f"{base_prefix}/rehabilitation", tags=["Rehabilitation"])
     app.include_router(health.router, prefix=f"{base_prefix}/health", tags=["Health"])
-    app.include_router(test.router, prefix=f"{base_prefix}/test", tags=["Test"])
+    if settings.APP_ENV != "production":
+        app.include_router(test.router, prefix=f"{base_prefix}/test", tags=["Test"])
     app.include_router(config.router, prefix=f"{base_prefix}/config", tags=["Config"])
 
 

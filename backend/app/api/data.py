@@ -14,7 +14,8 @@ from typing import Optional, List
 
 from app.core.database import get_db
 from app.core.i18n import get_locale, msg
-from app.api.auth import oauth2_scheme, get_current_user_from_token
+from app.core.security import verify_device_key
+from app.api.auth import get_current_user_from_token
 from app.models.user import User
 from app.models.device import Device
 from app.models.tremor_data import TremorData, TremorSession
@@ -322,13 +323,14 @@ async def end_session(
 async def upload_tremor_data(
     request: Request,
     data: TremorDataUpload,
+    _: None = Depends(verify_device_key),
     db: AsyncSession = Depends(get_db)
 ):
     """
     上传单条震颤数据
 
     设备每次分析后调用此接口上传数据
-    无需认证，设备通过 device_id 识别
+    设备通过 X-Device-Key 头进行认证
     """
     # 获取或创建设备
     device = await get_or_create_device(db, data.device_id)
@@ -385,6 +387,7 @@ async def upload_tremor_data(
 async def upload_batch_data(
     request: Request,
     batch: BatchUpload,
+    _: None = Depends(verify_device_key),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -580,7 +583,7 @@ async def get_recent_data(
     sessions_result = await db.execute(
         select(TremorSession.id).where(TremorSession.user_id == current_user.id)
     )
-    session_ids = [s.id for s in sessions_result.scalars().all()]
+    session_ids = list(sessions_result.scalars().all())
 
     if not session_ids:
         return []

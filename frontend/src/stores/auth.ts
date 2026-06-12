@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Tremor Guard - Auth Store
  * 震颤卫士 - 认证状态管理

@@ -1,19 +1,10 @@
 /**
  * Tremor Guard - AI API
- * 震颤卫士 - AI API (增强版)
+ * 震颤卫士 - AI API（仅包含后端已实现的接口）
  */
 
 import apiClient from './index'
-import type {
-  DailyAnalysis,
-  PersonalizedAdvice,
-  DoctorVisitReport,
-  AIConversationContext,
-  SymptomCheckRequest,
-  SymptomCheckResponse,
-  ChatMessage,
-  AIActionCard,
-} from '@/types'
+import type { ChatMessage, AIActionCard } from '@/types'
 
 export interface ChatRequest {
   message: string
@@ -54,13 +45,6 @@ export interface HealthTipsResponse {
 }
 
 export const aiApi = {
-  // ============================================================
-  // 基础对话功能
-  // ============================================================
-
-  /**
-   * AI 对话
-   */
   async chat(message: string, history?: ChatMessage[]): Promise<ChatResponse> {
     const response = await apiClient.post<ChatResponse>('/ai/chat', {
       message,
@@ -75,226 +59,106 @@ export const aiApi = {
   },
 
   async downloadActionPdf(actionPath: string): Promise<Blob> {
-    const response = await apiClient.get(actionPath, {
-      responseType: 'blob',
-    })
+    const response = await apiClient.get(actionPath, { responseType: 'blob' })
     return response.data
   },
 
-  /**
-   * AI 分析
-   */
   async analyze(days = 7): Promise<AnalysisResponse> {
-    const response = await apiClient.post<AnalysisResponse>('/ai/analyze', {
-      days,
-    })
+    const response = await apiClient.post<AnalysisResponse>('/ai/analyze', { days })
     return response.data
   },
 
-  /**
-   * 获取洞察
-   */
   async getInsights(days = 7): Promise<InsightsResponse> {
-    const response = await apiClient.get<InsightsResponse>('/ai/insights', {
-      params: { days },
-    })
+    const response = await apiClient.get<InsightsResponse>('/ai/insights', { params: { days } })
     return response.data
   },
 
-  /**
-   * 获取健康提示
-   */
   async getHealthTips(): Promise<HealthTipsResponse> {
     const response = await apiClient.get<HealthTipsResponse>('/ai/health-tips')
     return response.data
   },
 
-  // ============================================================
-  // 增强功能：今日智能解读
-  // ============================================================
-
-  /**
-   * 获取今日/指定日期的智能解读
-   */
-  async getDailyAnalysis(date?: string): Promise<DailyAnalysis> {
-    const response = await apiClient.get<DailyAnalysis>('/ai/daily-analysis', {
-      params: { date },
+  async getDailyAnalysis(date?: string): Promise<DailyAnalysisResponse> {
+    const response = await apiClient.get<DailyAnalysisResponse>('/ai/daily-analysis', {
+      params: date ? { date } : undefined,
     })
     return response.data
   },
 
-  /**
-   * 刷新今日解读（重新生成）
-   */
-  async refreshDailyAnalysis(date?: string): Promise<DailyAnalysis> {
-    const response = await apiClient.post<DailyAnalysis>('/ai/daily-analysis/refresh', {
-      date,
-    })
+  async generateDoctorReport(payload: DoctorReportRequest): Promise<DoctorVisitReportResponse> {
+    const response = await apiClient.post<DoctorVisitReportResponse>('/ai/doctor-report', payload)
     return response.data
   },
 
-  // ============================================================
-  // 增强功能：个性化建议
-  // ============================================================
-
-  /**
-   * 获取个性化建议
-   */
-  async getPersonalizedAdvice(params?: {
-    categories?: string[]
-    limit?: number
-  }): Promise<PersonalizedAdvice[]> {
-    const response = await apiClient.get<PersonalizedAdvice[]>('/ai/personalized-advice', {
-      params,
-    })
+  async checkSymptoms(payload: SymptomCheckRequest): Promise<SymptomCheckResponse> {
+    const response = await apiClient.post<SymptomCheckResponse>('/ai/symptom-check', payload)
     return response.data
   },
+}
 
-  /**
-   * 刷新个性化建议
-   */
-  async refreshAdvice(): Promise<PersonalizedAdvice[]> {
-    const response = await apiClient.post<PersonalizedAdvice[]>('/ai/personalized-advice/refresh')
-    return response.data
-  },
+export interface DailyAnalysisResponse {
+  date: string
+  summary: string
+  tremor_summary: {
+    total_detections: number
+    avg_severity: number
+    max_severity: number
+    trend: 'better' | 'same' | 'worse'
+    comparison_text: string
+  }
+  key_observations: string[]
+  concerns: string[]
+  positive_notes: string[]
+  recommendations: string[]
+  medication_notes?: string | null
+  exercise_notes?: string | null
+  generated_at: string
+}
 
-  /**
-   * 标记建议已读/已采纳
-   */
-  async markAdviceActioned(adviceId: string): Promise<void> {
-    await apiClient.post(`/ai/personalized-advice/${adviceId}/action`)
-  },
+export interface DoctorReportRequest {
+  start_date: string
+  end_date: string
+}
 
-  // ============================================================
-  // 增强功能：就诊报告生成
-  // ============================================================
+export interface DoctorVisitReportResponse {
+  report_id: string
+  generated_at: string
+  period: { start: string; end: string; days: number }
+  patient_info: { name: string; age?: number }
+  summary: {
+    executive_summary: string
+    key_metrics: { metric: string; value: string; trend: string }[]
+  }
+  tremor_analysis: {
+    frequency_analysis: string
+    severity_distribution: Record<string, number>
+    peak_times: string[]
+    notable_patterns: string[]
+  }
+  medication_analysis?: {
+    current_medications: string[]
+    effectiveness_summary: string
+    concerns: string[]
+  } | null
+  ai_observations: string[]
+  questions_for_doctor: string[]
+  data_appendix: {
+    daily_summaries: { date: string; detections: number; avg_severity: number }[]
+  }
+}
 
-  /**
-   * 生成就诊报告
-   */
-  async generateDoctorReport(params: {
-    startDate: string
-    endDate: string
-    includeMedication?: boolean
-    includeExercise?: boolean
-    language?: 'zh' | 'en'
-  }): Promise<DoctorVisitReport> {
-    const response = await apiClient.post<DoctorVisitReport>('/ai/doctor-report', params)
-    return response.data
-  },
+export interface SymptomCheckRequest {
+  symptoms: string[]
+  duration: string
+  severity: number
+  associated_factors?: string[]
+}
 
-  /**
-   * 获取已生成的报告列表
-   */
-  async listDoctorReports(): Promise<
-    {
-      report_id: string
-      generated_at: string
-      period_start: string
-      period_end: string
-    }[]
-  > {
-    const response = await apiClient.get('/ai/doctor-reports')
-    return response.data
-  },
-
-  /**
-   * 获取指定报告
-   */
-  async getDoctorReport(reportId: string): Promise<DoctorVisitReport> {
-    const response = await apiClient.get<DoctorVisitReport>(`/ai/doctor-reports/${reportId}`)
-    return response.data
-  },
-
-  /**
-   * 导出报告为 PDF
-   */
-  async exportDoctorReportPDF(reportId: string): Promise<Blob> {
-    const response = await apiClient.get(`/ai/doctor-reports/${reportId}/pdf`, {
-      responseType: 'blob',
-    })
-    return response.data
-  },
-
-  // ============================================================
-  // 增强功能：上下文感知对话
-  // ============================================================
-
-  /**
-   * 带上下文的对话
-   */
-  async chatWithContext(
-    message: string,
-    context: AIConversationContext,
-    history?: ChatMessage[]
-  ): Promise<ChatResponse & { context_used: string[] }> {
-    const response = await apiClient.post('/ai/chat/context', {
-      message,
-      context,
-      conversation_history: history,
-    })
-    return response.data
-  },
-
-  /**
-   * 获取上下文建议问题
-   */
-  async getContextualQuestions(): Promise<
-    {
-      category: string
-      questions: string[]
-    }[]
-  > {
-    const response = await apiClient.get('/ai/contextual-questions')
-    return response.data
-  },
-
-  // ============================================================
-  // 增强功能：症状自查
-  // ============================================================
-
-  /**
-   * 症状自查
-   */
-  async checkSymptoms(data: SymptomCheckRequest): Promise<SymptomCheckResponse> {
-    const response = await apiClient.post<SymptomCheckResponse>('/ai/symptom-check', data)
-    return response.data
-  },
-
-  // ============================================================
-  // 增强功能：用药分析
-  // ============================================================
-
-  /**
-   * 分析用药效果
-   */
-  async analyzeMedicationEffectiveness(medicationId?: number): Promise<{
-    summary: string
-    effectiveness_score: number
-    optimal_timing: string
-    insights: string[]
-    suggestions: string[]
-  }> {
-    const response = await apiClient.get('/ai/medication-analysis', {
-      params: { medication_id: medicationId },
-    })
-    return response.data
-  },
-
-  // ============================================================
-  // Dashboard 集成
-  // ============================================================
-
-  /**
-   * 获取今日 AI 提示（用于 Dashboard）
-   */
-  async getTodayTips(): Promise<{
-    greeting: string
-    daily_summary?: string
-    quick_tips: string[]
-    alerts: { type: 'info' | 'warning' | 'success'; message: string }[]
-  }> {
-    const response = await apiClient.get('/ai/today-tips')
-    return response.data
-  },
+export interface SymptomCheckResponse {
+  assessment: string
+  possible_causes: string[]
+  urgency_level: 'routine' | 'soon' | 'urgent'
+  recommendations: string[]
+  should_see_doctor: boolean
+  related_to_parkinsons_likelihood: 'low' | 'medium' | 'high'
 }
